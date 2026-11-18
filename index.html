@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src blob:; connect-src https:; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Fiche personnelle — Zoo Finance</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%230f5c54%22/%3E%3Ctext x=%2216%22 y=%2223%22 font-size=%2219%22 font-family=%22Arial%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22%3EZ%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-row">
+      <div class="brand"><span class="logo" aria-hidden="true">Z</span> Zoo Finance</div>
+      <button type="button" id="langBtn" class="lang">English</button>
+    </div>
+    <div class="wrap hero">
+      <p class="formno" id="formNo"></p>
+      <h1 id="title">Fiche personnelle</h1>
+      <p id="sub"></p>
+    </div>
+  </header>
+
+  <main class="wrap layout">
+    <aside class="side">
+      <div id="progress">
+        <div class="bar"><span id="bar"></span></div>
+        <p class="muted small" id="stepTxt"></p>
+        <ol id="steps" class="steps"></ol>
+      </div>
+      <div class="device">
+        <p id="saveStatus" class="save"></p>
+        <label class="switch"><input type="checkbox" id="remember"> <span id="rememberLbl"></span></label>
+        <p class="muted small" id="rememberHint"></p>
+        <button type="button" id="clearBtn" class="link danger"></button>
+      </div>
+    </aside>
+
+    <section class="panel">
+      <form id="form" novalidate>
+        <!-- honeypot: real people never see or fill this -->
+        <div class="hp" aria-hidden="true"><label>Website <input id="hp" name="website" tabindex="-1" autocomplete="off"></label></div>
+        <div id="stage"></div>
+        <p id="formErr" class="form-err" role="alert"></p>
+        <nav id="nav" class="nav">
+          <button type="button" id="backBtn" class="btn ghost">← Retour</button>
+          <button type="button" id="nextBtn" class="btn">Suivant →</button>
+        </nav>
+      </form>
+    </section>
+  </main>
+
+  <footer class="wrap foot muted small">
+    Zoo Finance · <a href="mailto:serviceclient@zoofinance.ca">serviceclient@zoofinance.ca</a> · zoofinance.ca
+  </footer>
+
+  <script src="vendor/pdf-lib.min.js"></script>
+  <script src="config.js"></script>
+  <script src="js/schema.js"></script>
+  <script src="js/pdf.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
