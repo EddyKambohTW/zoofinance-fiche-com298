@@ -183,6 +183,7 @@
   }
 
   function onChange() {
+    S.downloaded = false;
     applyVisibility();
     renderProgress();
     save();
@@ -288,6 +289,79 @@
     S = { d: {}, lang: S.lang, step: 0, remember: S.remember }; // in-memory reset, nothing persisted
   }
 
+  // ---------------- "download + email it yourself" ending ----------------
+  function emailSteps(stage) {
+    const inbox = CFG.inbox || "serviceclient@zoofinance.ca";
+    const name = `${d.first || ""} ${d.last || ""}`.trim();
+    const subject = `${t(UI.mailSubject)} COM-298 ${YEAR} – ${name}`;
+    const body = () => t(UI.mailBody).replace("{year}", YEAR).replace("{file}", fileName()).replace("{name}", name);
+    const mailto = () => `mailto:${inbox}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body())}`;
+
+    const done1 = h("p", { class: "ok small", hidden: true });
+    const step2 = h("div", { class: "estep", hidden: true });
+    const step3 = h("div", { class: "estep", hidden: true });
+
+    const btn1 = h("button", { type: "button", class: "btn big", id: "submitBtn", onclick: async (e) => {
+      if (!validateAll()) return;              // jumps to the first incomplete step if needed
+      const blob = await makePdf(); downloadBlob(blob);
+      S.downloaded = true; save(true);
+      render();                                 // validateAll re-rendered the page; draw it again with steps 2–3 open
+      const s2 = document.querySelector(".estep:nth-of-type(2)") || document.querySelectorAll(".estep")[1];
+      s2 && s2.scrollIntoView({ behavior: "smooth", block: "center" });
+    } }, "⬇ " + t(UI.s1Btn));
+
+    const showSteps = (blob) => {
+      done1.hidden = false; done1.textContent = `✓ ${t(UI.s1Done)} ${fileName()}`;
+      step2.hidden = false; step3.hidden = false;
+      // Web Share (phones/tablets, some desktops): opens the mail app with the PDF already attached
+      const file = blob && typeof File !== "undefined" ? new File([blob], fileName(), { type: "application/pdf" }) : null;
+      const shareBox = step2.querySelector(".share");
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        shareBox.hidden = false;
+        shareBox.querySelector("button").onclick = () => navigator.share({ files: [file], title: subject, text: body() }).catch(() => {});
+      }
+    };
+
+    const copyBtn = h("button", { type: "button", class: "link", onclick: async (e) => {
+      try { await navigator.clipboard.writeText(inbox); e.target.textContent = t(UI.copied); } catch (err) {}
+    } }, t(UI.copy));
+
+    stage.append(h("div", { class: "estep" },
+      h("h3", {}, h("span", { class: "snum" }, "1"), t(UI.s1Title)),
+      btn1, done1, h("p", { class: "muted small" }, t(UI.s1Hint))));
+
+    step2.append(
+      h("h3", {}, h("span", { class: "snum" }, "2"), t(UI.s2Title)),
+      h("p", {}, t(UI.s2Body), " ", h("strong", { class: "addr" }, inbox), " ", copyBtn),
+      h("div", { class: "row" }, h("a", { class: "btn", href: mailto(), onclick: (e) => { e.currentTarget.href = mailto(); } }, "✉ " + t(UI.s2Mail))),
+      h("p", { class: "muted small" }, t(UI.s2MailHint)),
+      h("div", { class: "share", hidden: true },
+        h("button", { type: "button", class: "btn ghost" }, t(UI.s2Share)),
+        h("p", { class: "muted small" }, t(UI.s2ShareHint))),
+      h("p", { class: "muted small" }, t(UI.s2Also)));
+    stage.append(step2);
+
+    step3.append(
+      h("h3", {}, h("span", { class: "snum" }, "3"), t(UI.s3Title)),
+      h("p", {}, t(UI.s3Body)),
+      h("button", { type: "button", class: "btn ghost", onclick: () => {
+        DONE = true; clearTimeout(saveTimer); wipe(); showErased();
+      } }, t(UI.s3Btn)));
+    stage.append(step3);
+
+    if (S.downloaded) showSteps(lastPdf); // after downloading (or coming back later): keep steps 2–3 visible
+  }
+
+  function showErased() {
+    const main = $("#stage"); main.innerHTML = "";
+    $("#nav").hidden = true; $("#progress").hidden = true;
+    main.append(h("div", { class: "done" },
+      h("div", { class: "check", "aria-hidden": "true" }, "✓"),
+      h("h2", {}, t(UI.erasedTitle)), h("p", {}, t(UI.erasedBody)),
+      h("div", { class: "row" },
+        h("button", { type: "button", class: "btn ghost", onclick: () => { location.href = location.pathname + `?lang=${S.lang}`; } }, t(UI.newForm)))));
+  }
+
   // ---------------- page rendering ----------------
   function renderSaveStatus() {
     const el = $("#saveStatus"); if (!el) return;
@@ -340,11 +414,14 @@
           frame.innerHTML = ""; frame.append(h("iframe", { src: url, title: t(UI.preview) }));
           frame.append(h("p", { class: "muted small" }, h("a", { href: url, target: "_blank", rel: "noopener" }, t(UI.preview) + " ↗")));
         } }, t(UI.preview)),
-        h("button", { type: "button", class: "btn ghost", onclick: async () => downloadBlob(await makePdf()) }, t(UI.download))));
+        CFG.webhookUrl ? h("button", { type: "button", class: "btn ghost", onclick: async () => downloadBlob(await makePdf()) }, t(UI.download)) : null));
       stage.append(frame);
+      if (!CFG.webhookUrl) { stage.querySelector(".info").textContent = t(UI.reviewBodyEmail); emailSteps(stage); $("#nextBtn").hidden = true; }
+      else {
       stage.append(h("div", { class: "submit-row" },
         h("button", { type: "button", class: "btn big", id: "submitBtn", onclick: (e) => submit(e.currentTarget) }, t(UI.submit) + " →")));
       stage.append(h("div", { id: "submitStatus", class: "status", role: "status" }));
+      }
       $("#nextBtn").hidden = true;
     } else {
       const grid = h("div", { class: "grid" });
