@@ -15,8 +15,7 @@ fill in online instead of printing. It runs on **GitHub Pages**, has no server a
    in the mail app directly), and **(3)** erase their answers from the device once it's sent.
    - **COM-1076.TD.A (tax data download):** if the client answers Yes in Part 4, the last step shows the authorization and asks them to
      sign it on screen (finger or mouse), type their name and check a consent box. The PDF then includes a reproduction of COM-1076.TD.A
-     with the signature, a signature certificate (date and time, email, device, SHA-256 fingerprint), and a red banner on page 1
-     reading "download before …". **The authorization is valid for 2 days**, so download the data within 48 hours of receiving the email.
+     with the signature and a signature certificate (date and time, email, device, SHA-256 fingerprint). **The authorization is valid for 2 days**, so download the data within 48 hours of receiving the email.
      A signature older than 24 hours is cleared and the client is asked to sign again. Organization name, ImpôtNet number and software
      are set in `config.js`.
    - **Documents to attach:** a checklist built from the answers (RL-31 for tenants, medical receipts, support judgment, RL-19,

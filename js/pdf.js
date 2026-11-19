@@ -123,18 +123,8 @@
     text(lang === "fr" ? "J J   M M   A A A A" : "D D   M M   Y Y Y Y", bx + 8, by + 8, 8, reg, RULE);
     y = H - 160;
 
-    // tax-data download deadline (COM-1076.TD.A is valid 2 days after signing)
     const authOn = ZFS.needsAuth(d) && d.sig && d.sig_at;
     const fmtD = (dt) => dt.toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { day: "numeric", month: "long", year: "numeric" });
-    if (authOn) {
-      const until = ZFS.authValidUntil(d);
-      const msg = `${U.pdfAuthBanner[lang]} ${fmtD(until)}`;
-      const lines = wrap(msg, bold, 9.5, W - 2 * M - 20);
-      const h = 12 + lines.length * 12;
-      page.drawRectangle({ x: M, y: y - h + 6, width: W - 2 * M, height: h, color: rgb(0.99, 0.91, 0.86) });
-      let yy = y - 8; for (const ln of lines) { text(ln, M + 10, yy, 9.5, bold, rgb(0.6, 0.18, 0.05)); yy -= 12; }
-      y -= h + 8;
-    }
 
     // eligibility flags
     const elig = d.elig || [];
