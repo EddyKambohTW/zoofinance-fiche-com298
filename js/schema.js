@@ -3,7 +3,14 @@
  * Each label is { en, fr }. `show(d)` decides if a field/section applies.
  */
 (function (root) {
-  const YEAR = 2026;
+  // Taxation year: defaults to the current filing period (from October, the year that is ending;
+  // before October, last year). The client can pick up to MAX_BACK earlier years.
+  const MAX_BACK = 5;
+  const DEFAULT_YEAR = (() => { const n = new Date(); return n.getMonth() >= 9 ? n.getFullYear() : n.getFullYear() - 1; })();
+  const YEARS = Array.from({ length: MAX_BACK + 1 }, (_, i) => DEFAULT_YEAR - i);
+  const yr = (d) => { const y = Number(d && d.tax_year); return YEARS.includes(y) ? y : DEFAULT_YEAR; };
+  const fillY = (str, d) => String(str).replace(/\{Y\}/g, yr(d));
+  const YEAR = DEFAULT_YEAR; // default year (labels use {Y}, resolved with yr(d))
 
   const L = (en, fr) => ({ en, fr });
   const YES = L("Yes", "Oui"), NO = L("No", "Non");
@@ -11,15 +18,15 @@
 
   // ---------- helpers on the answers object `d` ----------
   const hasSpouse = (d) => d.marital === "married" || d.marital === "commonlaw";
-  const ageAtYearEnd = (iso) => {
+  const ageAtYearEnd = (iso, year) => {
     if (!iso) return null;
     const [y, m, day] = iso.split("-").map(Number);
     if (!y) return null;
-    let a = YEAR - y;
+    let a = (year || YEAR) - y;
     if (m > 12 || (m === 12 && day > 31)) a--; // (birthdays are always ≤ Dec 31)
     return a;
   };
-  const is70 = (d) => (ageAtYearEnd(d.dob) || 0) >= 70 || (hasSpouse(d) && (ageAtYearEnd(d.sp_dob) || 0) >= 70);
+  const is70 = (d) => (ageAtYearEnd(d.dob, yr(d)) || 0) >= 70 || (hasSpouse(d) && (ageAtYearEnd(d.sp_dob, yr(d)) || 0) >= 70);
   const has = (d, id, v) => Array.isArray(d[id]) && d[id].includes(v);
 
   const PROVINCES = [
@@ -66,6 +73,11 @@
   const intro = {
     id: "start", num: "", title: L("Before you start", "Avant de commencer"),
     fields: [
+      { id: "tax_year", t: "select", req: true, w: "half", def: String(DEFAULT_YEAR), l: L("Taxation year of this information sheet", "Année d’imposition visée par cette fiche"),
+        opts: YEARS.map((y) => [String(y), y === DEFAULT_YEAR ? L(`${y} (current period)`, `${y} (période en cours)`) : L(`${y} (previous year)`, `${y} (année antérieure)`)]) },
+      { id: "year_info", t: "info", show: (d) => yr(d) !== DEFAULT_YEAR, l: L(
+        "You are completing this sheet for {Y}. Every question below refers to {Y}, and you will need your {Y} slips. For several years, fill in one sheet per year.",
+        "Vous remplissez cette fiche pour {Y}. Toutes les questions ci-dessous portent sur l’année {Y}, et il vous faudra vos feuillets de {Y}. Pour plusieurs années, remplissez une fiche par année.") },
       { id: "c_email", t: "email", req: true, w: "half", l: L("Your email (so we can contact you)", "Votre courriel (pour que nous puissions vous joindre)") },
       { id: "c_phone", t: "tel", w: "half", l: L("Best phone number", "Meilleur numéro de téléphone") },
       { id: "elig_info", t: "info", l: L(
@@ -90,12 +102,12 @@
       { id: "sex", t: "radio", w: "third", l: L("Sex", "Sexe"), opts: SEX },
       { id: "sin", t: "sin", req: true, w: "third", l: L("Social insurance number (SIN)", "Numéro d’assurance sociale (NAS)") },
       { id: "dob", t: "date", req: true, w: "third", l: L("Date of birth", "Date de naissance") },
-      { id: "prov_res", t: "select", w: "half", l: L(`Province of residence on December 31, ${YEAR}`, `Province de résidence le 31 décembre ${YEAR}`), opts: PROVINCES, def: "QC" },
-      { id: "marital", t: "radio", req: true, l: L(`Marital status on December 31, ${YEAR}`, `État civil le 31 décembre ${YEAR}`), opts: [
+      { id: "prov_res", t: "select", w: "half", l: L(`Province of residence on December 31, {Y}`, `Province de résidence le 31 décembre {Y}`), opts: PROVINCES, def: "QC" },
+      { id: "marital", t: "radio", req: true, l: L(`Marital status on December 31, {Y}`, `État civil le 31 décembre {Y}`), opts: [
         ["single", L("Single", "Célibataire")], ["separated", L("Separated", "Séparé")], ["divorced", L("Divorced", "Divorcé")],
         ["widowed", L("Widowed", "Veuf")], ["married", L("Married", "Marié")], ["commonlaw", L("Common-law spouse", "Conjoint de fait")],
       ] },
-      { id: "marital_change", t: "text", l: L(`If your marital status changed in ${YEAR}, how and when? (e.g. divorced on June 15)`, `Si votre état civil a changé en ${YEAR}, type de changement et date (ex. : de marié à divorcé le 15 juin)`) },
+      { id: "marital_change", t: "text", l: L(`If your marital status changed in {Y}, how and when? (e.g. divorced on June 15)`, `Si votre état civil a changé en {Y}, type de changement et date (ex. : de marié à divorcé le 15 juin)`) },
       { id: "addr_h", t: "heading", l: L("Current address", "Adresse actuelle") },
       { id: "street", t: "text", req: true, l: L("Apt., street number, street name", "Appartement, numéro, rue") },
       { id: "city", t: "text", req: true, w: "half", l: L("City, town or municipality", "Ville, village ou municipalité") },
@@ -112,7 +124,7 @@
       { id: "cra_email", t: "email", show: (d) => d.cra_online === "yes", l: L("Email for CRA My Account notifications (you must be registered for My Account)", "Courriel pour les avis de Mon dossier de l’ARC (vous devez être inscrit à Mon dossier)") },
       { id: "first_qc", t: "yn", l: L("Is this your first Québec income tax return?", "Est-ce votre première déclaration de revenus du Québec ?") },
       { id: "qc_english", t: "radio", show: (d) => d.first_qc === "yes", l: L("If you would like Revenu Québec to communicate with you in English, which best describes your situation?", "Si vous souhaitez que Revenu Québec communique avec vous en anglais, quelle case décrit le mieux votre situation ?"), opts: QC_ENGLISH("you") },
-      { id: "lived_alone", t: "yn", l: L(`Throughout ${YEAR}, did you live alone or with one or more dependent children?`, `Durant toute l’année ${YEAR}, avez-vous habité seul ou avec un ou plusieurs enfants à charge ?`) },
+      { id: "lived_alone", t: "yn", l: L(`Throughout {Y}, did you live alone or with one or more dependent children?`, `Durant toute l’année {Y}, avez-vous habité seul ou avec un ou plusieurs enfants à charge ?`) },
       { id: "crypto", t: "yn", l: L("Did you receive or use one or more cryptoassets?", "Avez-vous reçu ou utilisé un ou plusieurs cryptoactifs ?") },
       { id: "solidarity", t: "yn", l: L("Are you claiming the solidarity tax credit?", "Voulez-vous demander le crédit d’impôt pour solidarité ?") },
       { id: "rq_notify", t: "radio", l: L("How would you like Revenu Québec to notify you of activity in your file?", "Comment voulez-vous recevoir les notifications de Revenu Québec concernant votre dossier ?"), opts: NOTIFY },
@@ -125,10 +137,10 @@
     id: "p2", num: "2", title: L("Québec prescription drug insurance", "Assurance médicaments du Québec"),
     show: (d) => d.prov_res === "QC" || !d.prov_res,
     fields: [
-      { id: "drug_plan", t: "radio", req: true, l: L(`Were you covered by a private prescription drug insurance plan for all of ${YEAR}?`, `Étiez-vous couvert pendant toute l’année ${YEAR} par un régime privé d’assurance médicaments ?`), opts: [
+      { id: "drug_plan", t: "radio", req: true, l: L(`Were you covered by a private prescription drug insurance plan for all of {Y}?`, `Étiez-vous couvert pendant toute l’année {Y} par un régime privé d’assurance médicaments ?`), opts: [
         ["own", L("Yes, my plan", "Oui, le mien")], ["spouse", L("Yes, my spouse’s or my parent’s plan", "Oui, celui de mon conjoint ou d’un parent")], ["no", NO],
       ] },
-      { id: "drug_sit", t: "checks", show: (d) => d.drug_plan === "no", l: L(`Did any of these situations apply to you in ${YEAR}? Check all that apply.`, `En ${YEAR}, étiez-vous dans l’une ou plusieurs de ces situations ? Cochez toutes celles qui s’appliquent.`), opts: [
+      { id: "drug_sit", t: "checks", show: (d) => d.drug_plan === "no", l: L(`Did any of these situations apply to you in {Y}? Check all that apply.`, `En {Y}, étiez-vous dans l’une ou plusieurs de ces situations ? Cochez toutes celles qui s’appliquent.`), opts: [
         ["ownplan", L("Covered by your own private plan", "Couvert par votre propre régime privé")],
         ["indian", L("Registered Indian", "Indien inscrit au registre du ministère")],
         ["immig", L("Immigrant or emigrant", "Immigrant ou émigrant")],
@@ -155,13 +167,13 @@
       { id: "p3_info", t: "info", l: L(
         "If your spouse lived with you on December 31, only one of you claims the credit for the couple. Refugee protection claimants, and temporary residents who had lived in Canada less than 18 months on December 31, are not eligible.",
         "Si votre conjoint habitait avec vous au 31 décembre, un seul de vous deux demande le crédit pour le couple. Les demandeurs d’asile et les résidents temporaires établis au Canada depuis moins de 18 mois au 31 décembre n’y ont pas droit.") },
-      { id: "sol_alone", t: "radio", l: L(`Throughout ${YEAR}, did you live alone in a dwelling or only with people under 18?`, `Pendant toute l’année ${YEAR}, avez-vous vécu seul dans une habitation ou uniquement avec des personnes de moins de 18 ans ?`), opts: [["yes", YES], ["no", L("No (spouse, co-tenant or children over 18)", "Non (conjoint, colocataire ou enfants de plus de 18 ans)")]] },
-      { id: "sol_same_addr", t: "yn", l: L(`Was your address on December 31, ${YEAR}, the same as your current address?`, `Votre adresse au 31 décembre ${YEAR} est-elle la même que votre adresse actuelle ?`) },
+      { id: "sol_alone", t: "radio", l: L(`Throughout {Y}, did you live alone in a dwelling or only with people under 18?`, `Pendant toute l’année {Y}, avez-vous vécu seul dans une habitation ou uniquement avec des personnes de moins de 18 ans ?`), opts: [["yes", YES], ["no", L("No (spouse, co-tenant or children over 18)", "Non (conjoint, colocataire ou enfants de plus de 18 ans)")]] },
+      { id: "sol_same_addr", t: "yn", l: L(`Was your address on December 31, {Y}, the same as your current address?`, `Votre adresse au 31 décembre {Y} est-elle la même que votre adresse actuelle ?`) },
       { id: "dec_street", t: "text", show: (d) => d.sol_same_addr === "no", l: L("Dec. 31 address — Apt., street number, street name or PO box", "Adresse au 31 déc. — Appartement, numéro, rue ou case postale") },
       { id: "dec_city", t: "text", w: "half", show: (d) => d.sol_same_addr === "no", l: L("City, town or municipality", "Ville, village ou municipalité") },
       { id: "dec_prov", t: "select", w: "quarter", show: (d) => d.sol_same_addr === "no", l: L("Province", "Province"), opts: PROVINCES, def: "QC" },
       { id: "dec_postal", t: "postal", w: "quarter", show: (d) => d.sol_same_addr === "no", l: L("Postal code", "Code postal") },
-      { id: "housing", t: "radio", l: L(`On December 31, ${YEAR}, were you or your spouse:`, `Au 31 décembre ${YEAR}, vous ou votre conjoint étiez :`), opts: [
+      { id: "housing", t: "radio", l: L(`On December 31, {Y}, were you or your spouse:`, `Au 31 décembre {Y}, vous ou votre conjoint étiez :`), opts: [
         ["tenant", L("Tenants or subtenants (RL-31 slip)", "Locataire(s) ou sous-locataire(s) [relevé 31]")], ["owner", L("Owners", "Propriétaire(s)")], ["neither", L("Neither tenants nor owners", "Ni locataire(s) ni propriétaire(s)")],
       ] },
       { id: "rl31_info", t: "info", show: (d) => d.housing === "tenant", l: L("You should have received an RL-31 slip from your landlord. Please send it to us with your other slips.", "Vous devriez avoir reçu un relevé 31 de votre propriétaire. Veuillez nous le faire parvenir avec vos autres feuillets.") },
@@ -170,7 +182,7 @@
       ] },
       { id: "owner_name", t: "text", w: "half", show: (d) => d.housing === "owner", l: L("Owner", "Propriétaire") },
       { id: "roll_no", t: "text", w: "half", show: (d) => d.housing === "owner", l: L("Roll number or cadastral designation (municipal tax bill)", "Numéro matricule ou désignation cadastrale (compte de taxes municipales)") },
-      { id: "sol_with_sp", t: "radio", show: hasSpouse, l: L(`Was your spouse living with you on December 31, ${YEAR}?`, `Votre conjoint habitait-il avec vous au 31 décembre ${YEAR} ?`), opts: YN },
+      { id: "sol_with_sp", t: "radio", show: hasSpouse, l: L(`Was your spouse living with you on December 31, {Y}?`, `Votre conjoint habitait-il avec vous au 31 décembre {Y} ?`), opts: YN },
     ],
   };
 
@@ -189,19 +201,19 @@
     id: "p5", num: "5", title: L("Tax credit for home-support services for seniors (70 or over)", "Crédit d’impôt pour maintien à domicile des aînés (70 ans ou plus)"),
     show: is70,
     fields: [
-      { id: "sen_rl19", t: "yn", l: L(`In ${YEAR}, did you receive advance payments of this credit (RL-19 slip)?`, `En ${YEAR}, avez-vous reçu des versements anticipés de ce crédit (relevé 19) ?`) },
-      { id: "sen_same_fam", t: "yn", l: L(`Was your family situation the same throughout ${YEAR} (e.g. you had a spouse all year, or had no spouse all year)?`, `Durant toute l’année ${YEAR}, votre situation familiale est-elle restée la même (ex. : avec conjoint ou sans conjoint toute l’année) ?`) },
-      { id: "sen_res", t: "radio", l: L(`Place of residence in ${YEAR}`, `Lieu de résidence en ${YEAR}`), opts: [
+      { id: "sen_rl19", t: "yn", l: L(`In {Y}, did you receive advance payments of this credit (RL-19 slip)?`, `En {Y}, avez-vous reçu des versements anticipés de ce crédit (relevé 19) ?`) },
+      { id: "sen_same_fam", t: "yn", l: L(`Was your family situation the same throughout {Y} (e.g. you had a spouse all year, or had no spouse all year)?`, `Durant toute l’année {Y}, votre situation familiale est-elle restée la même (ex. : avec conjoint ou sans conjoint toute l’année) ?`) },
+      { id: "sen_res", t: "radio", l: L(`Place of residence in {Y}`, `Lieu de résidence en {Y}`), opts: [
         ["own", L("Your own house or a health establishment", "Votre propre maison ou établissement de santé")], ["rpa", L("Private seniors’ residence (RPA)", "Résidence privée pour aînés (RPA)")],
         ["apartment", L("Apartment building (other than an RPA)", "Immeuble de logements (autre qu’une RPA)")], ["condo", L("Condominium", "Immeuble en copropriété (condominium)")],
       ] },
-      { id: "sen_same_dw", t: "yn", l: L(`Did you live in the same dwelling throughout ${YEAR}?`, `Avez-vous habité au même endroit durant toute l’année ${YEAR} ?`) },
+      { id: "sen_same_dw", t: "yn", l: L(`Did you live in the same dwelling throughout {Y}?`, `Avez-vous habité au même endroit durant toute l’année {Y} ?`) },
       { id: "sen_auto", t: "radio", w: "half", l: L("Your level of autonomy on December 31", "Votre niveau d’autonomie au 31 décembre"), opts: [["nondep", L("Non-dependent", "Autonome")], ["dep", L("Dependent", "Non autonome")]] },
       { id: "sen_auto_date", t: "date", w: "half", show: (d) => d.sen_auto === "dep", l: L("Date you became dependent", "Date où vous êtes devenu non autonome") },
       { id: "sen_sp_auto", t: "radio", w: "half", show: hasSpouse, l: L("Your spouse’s level of autonomy (if claiming for your couple)", "Niveau d’autonomie de votre conjoint (si vous demandez pour le couple)"), opts: [["nondep", L("Non-dependent", "Autonome")], ["dep", L("Dependent", "Non autonome")]] },
       { id: "sen_sp_auto_date", t: "date", w: "half", show: (d) => hasSpouse(d) && d.sen_sp_auto === "dep", l: L("Date your spouse became dependent", "Date où votre conjoint est devenu non autonome") },
-      { id: "rent_jan", t: "money", w: "third", show: (d) => d.sen_res === "apartment", l: L(`Rent for January ${YEAR} (your share)`, `Loyer de janvier ${YEAR} (votre part)`) },
-      { id: "rent_dec", t: "money", w: "third", show: (d) => d.sen_res === "apartment", l: L(`Rent for December ${YEAR} (your share)`, `Loyer de décembre ${YEAR} (votre part)`) },
+      { id: "rent_jan", t: "money", w: "third", show: (d) => d.sen_res === "apartment", l: L(`Rent for January {Y} (your share)`, `Loyer de janvier {Y} (votre part)`) },
+      { id: "rent_dec", t: "money", w: "third", show: (d) => d.sen_res === "apartment", l: L(`Rent for December {Y} (your share)`, `Loyer de décembre {Y} (votre part)`) },
       { id: "rent_chg", t: "text", w: "third", show: (d) => d.sen_res === "apartment", l: L("Month rent changed, if applicable", "Mois du changement de loyer, s’il y a lieu") },
       { id: "cotenants", t: "number", w: "half", show: (d) => d.sen_res === "apartment", l: L("Number of co-tenants (not including your spouse)", "Nombre de colocataires (sans compter votre conjoint)") },
       { id: "sen_paid", t: "yn", show: own, l: L("Did you pay for home-support services not included in your rent or condo fees?", "Avez-vous payé des services de maintien à domicile non inclus dans votre loyer ou vos charges de copropriété ?") },
@@ -211,15 +223,15 @@
 
   // ---------- Part 6 ----------
   const p6items = (d) => [
-    ["medical", L(`Medical expenses paid in ${YEAR} that were not covered or refunded`, `Frais médicaux payés en ${YEAR} non couverts ou remboursés`)],
-    ["noincome", L(`Someone did not earn any income in ${YEAR}`, `Une personne n’a gagné aucun revenu en ${YEAR}`)],
-    ["prison", L(`Someone was confined to a prison or similar institution in ${YEAR}`, `Une personne a été détenue dans une prison ou un établissement semblable en ${YEAR}`)],
+    ["medical", L(`Medical expenses paid in {Y} that were not covered or refunded`, `Frais médicaux payés en {Y} non couverts ou remboursés`)],
+    ["noincome", L(`Someone did not earn any income in {Y}`, `Une personne n’a gagné aucun revenu en {Y}`)],
+    ["prison", L(`Someone was confined to a prison or similar institution in {Y}`, `Une personne a été détenue dans une prison ou un établissement semblable en {Y}`)],
     ["impair", L("Someone has an impairment", "Une personne présente une déficience")],
     ["severe", L("Severe and prolonged impairment certified by a qualified practitioner (T2201 and TP-752.0.14 already provided)", "Déficience grave et prolongée attestée par un praticien qualifié (T2201 et TP-752.0.14 déjà fournis)")],
     ["unable", L("Someone is unable to live alone (form TP-752.0.14)", "Une personne est incapable de vivre seule (formulaire TP-752.0.14)")],
     ["tuition", L("Transfer of the unused portion of tuition fees", "Transfert de la partie inutilisée des frais de scolarité")],
-    ["suprec", L(`Support payments received in ${YEAR}`, `Pension alimentaire reçue en ${YEAR}`)],
-    ["suppaid", L(`Support payments made in ${YEAR}`, `Pension alimentaire payée en ${YEAR}`)],
+    ["suprec", L(`Support payments received in {Y}`, `Pension alimentaire reçue en {Y}`)],
+    ["suppaid", L(`Support payments made in {Y}`, `Pension alimentaire payée en {Y}`)],
     ["graduate", L("Tax credit for recent graduates working in remote resource regions", "Crédit d’impôt pour nouveau diplômé travaillant dans une région ressource éloignée")],
     ["deps", L("Dependant(s) who do not live with you or your spouse", "Personne(s) à charge qui n’habitent pas avec vous ou votre conjoint")],
   ];
@@ -257,16 +269,16 @@
         { id: "dob", t: "date", w: "third", l: L("Date of birth", "Date de naissance") },
         { id: "inc", t: "money", w: "third", l: L("Net income", "Revenu net") },
       ] },
-      { id: "advance", t: "yn", l: L(`In ${YEAR}, did you receive advance payments (RL-19 or statement of payments) of the childcare expenses credit, the work premium credits or the Canada Workers Benefit?`, `En ${YEAR}, avez-vous reçu des versements anticipés (relevé 19 ou état des versements) du crédit pour frais de garde d’enfants, des crédits relatifs à la prime au travail ou de l’Allocation canadienne pour les travailleurs ?`) },
+      { id: "advance", t: "yn", l: L(`In {Y}, did you receive advance payments (RL-19 or statement of payments) of the childcare expenses credit, the work premium credits or the Canada Workers Benefit?`, `En {Y}, avez-vous reçu des versements anticipés (relevé 19 ou état des versements) du crédit pour frais de garde d’enfants, des crédits relatifs à la prime au travail ou de l’Allocation canadienne pour les travailleurs ?`) },
     ],
   };
 
   // ---------- Part 7 ----------
   const claim = (p) => p.claim === "yes";
   const p7 = {
-    id: "p7", num: "7", title: L(`People who lived with you in ${YEAR} (other than your spouse)`, `Personnes ayant habité avec vous en ${YEAR} (autres que votre conjoint)`),
+    id: "p7", num: "7", title: L(`People who lived with you in {Y} (other than your spouse)`, `Personnes ayant habité avec vous en {Y} (autres que votre conjoint)`),
     fields: [
-      { id: "cohab", t: "yn", req: true, l: L(`Did anyone other than your spouse live with you in ${YEAR}?`, `Une personne autre que votre conjoint a-t-elle habité avec vous en ${YEAR} ?`) },
+      { id: "cohab", t: "yn", req: true, l: L(`Did anyone other than your spouse live with you in {Y}?`, `Une personne autre que votre conjoint a-t-elle habité avec vous en {Y} ?`) },
       { id: "people", t: "repeat", show: (d) => d.cohab === "yes", max: 8, min: 1, item: L("Person", "Personne"), add: L("Add a person", "Ajouter une personne"), l: L("People who lived with you", "Personnes ayant habité avec vous"), fields: [
         { id: "first", t: "text", w: "half", l: L("First name", "Prénom") },
         { id: "last", t: "text", w: "half", l: L("Last name", "Nom de famille") },
@@ -294,7 +306,7 @@
   const p8 = {
     id: "p8", num: "8", title: L("Information about new residents", "Renseignements relatifs à un nouvel arrivant"),
     fields: [
-      { id: "arrived", t: "yn", req: true, l: L(`Did you arrive in Canada in ${YEAR}?`, `Êtes-vous arrivé au Canada en ${YEAR} ?`) },
+      { id: "arrived", t: "yn", req: true, l: L(`Did you arrive in Canada in {Y}?`, `Êtes-vous arrivé au Canada en {Y} ?`) },
       { id: "arr_date", t: "date", w: "half", show: (d) => d.arrived === "yes", l: L("Your date of arrival", "Votre date d’arrivée") },
       { id: "arr_reason", t: "radio", show: (d) => d.arrived === "yes", l: L("Reason for your arrival", "La raison de votre arrivée"), opts: ARRIVAL },
       { id: "arr_income", t: "text", show: (d) => d.arrived === "yes", l: L("Income earned from January 1 to your arrival date (CAD) and type of income", "Revenus gagnés du 1er janvier jusqu’à votre date d’arrivée (en $ CA) et type de revenus") },
@@ -329,7 +341,7 @@
       { id: "sp_crypto", t: "yn", show: spIn, l: L("Did your spouse receive or use one or more cryptoassets?", "Votre conjoint a-t-il reçu ou utilisé un ou plusieurs cryptoactifs ?") },
       { id: "sp_rq_notify", t: "radio", show: spIn, l: L("How would your spouse like Revenu Québec to notify them?", "Comment votre conjoint veut-il recevoir les notifications de Revenu Québec ?"), opts: NOTIFY },
       { id: "sp_rq_online", t: "yn", show: spIn, l: L("Does your spouse want Revenu Québec correspondence in My Account only?", "Votre conjoint souhaite-t-il recevoir ses communications de Revenu Québec dans Mon dossier uniquement ?") },
-      { id: "sp_immig", t: "yn", show: spIn, l: L(`Did your spouse immigrate to Canada in ${YEAR}?`, `Votre conjoint a-t-il immigré au Canada en ${YEAR} ?`) },
+      { id: "sp_immig", t: "yn", show: spIn, l: L(`Did your spouse immigrate to Canada in {Y}?`, `Votre conjoint a-t-il immigré au Canada en {Y} ?`) },
       { id: "sp_imm_net", t: "money", show: (d) => spIn(d) && d.sp_immig === "yes", l: L("If your spouse’s arrival date differs from yours: your net income while living in Canada with your spouse", "Si sa date d’arrivée diffère de la vôtre : votre revenu net alors que vous viviez au Canada avec votre conjoint") },
       { id: "sp_arr_date", t: "date", w: "half", show: (d) => spIn(d) && d.sp_immig === "yes", l: L("Spouse’s arrival date", "Sa date d’arrivée") },
       { id: "sp_arr_reason", t: "radio", show: (d) => spIn(d) && d.sp_immig === "yes", l: L("Reason for your spouse’s arrival", "La raison de son arrivée"), opts: ARRIVAL },
@@ -377,8 +389,8 @@
   const income = {
     id: "income", num: "", title: L("Your income and tax slips", "Vos revenus et feuillets d’impôt"),
     fields: [
-      { id: "inc_info", t: "info", l: L(`Check each situation that applied in ${YEAR}. The table shows the federal slip and the Québec slip (relevé) you should receive — you’ll get a checklist to attach them at the end.`,
-                                         `Cochez chaque situation qui s’appliquait en ${YEAR}. Le tableau indique le feuillet fédéral et le relevé du Québec que vous devriez recevoir — vous aurez une liste à cocher pour les joindre à la fin.`) },
+      { id: "inc_info", t: "info", l: L(`Check each situation that applied in {Y}. The table shows the federal slip and the Québec slip (relevé) you should receive — you’ll get a checklist to attach them at the end.`,
+                                         `Cochez chaque situation qui s’appliquait en {Y}. Le tableau indique le feuillet fédéral et le relevé du Québec que vous devriez recevoir — vous aurez une liste à cocher pour les joindre à la fin.`) },
       { id: "inc", t: "slips", l: L("Situations and slips", "Situations et feuillets") },
     ],
   };
@@ -399,7 +411,7 @@
   const UI = {
     title: L("Information Sheet", "Fiche personnelle"),
     formNo: L("COM-298-V (2026-12)", "COM-298 (2026-12)"),
-    sub: L(`For your ${YEAR} income tax returns — confidential`, `Pour vos déclarations de revenus ${YEAR} — confidentiel`),
+    sub: L(`For your {Y} income tax returns — confidential`, `Pour vos déclarations de revenus {Y} — confidentiel`),
     next: L("Next", "Suivant"), back: L("Back", "Retour"), review: L("Review", "Vérifier"),
     submit: L("Send to Zoo Finance", "Envoyer à Zoo Finance"), download: L("Download PDF copy", "Télécharger une copie PDF"),
     preview: L("Preview PDF", "Aperçu du PDF"),
@@ -535,7 +547,7 @@
     slipsPdf: L("Tax slips to provide (situations checked by the client)", "Feuillets et relevés à fournir (situations cochées par le client)"),
   });
 
-  const api = { YEAR, SECTIONS, UI, hasSpouse, ageAtYearEnd, is70, L, AUTH, authValidUntil, needsAuth, docsFor, SLIPS, slipRows, slipText };
+  const api = { YEAR, DEFAULT_YEAR, YEARS, yr, fillY, SECTIONS, UI, hasSpouse, ageAtYearEnd, is70, L, AUTH, authValidUntil, needsAuth, docsFor, SLIPS, slipRows, slipText };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ZF = api;
 })(typeof window !== "undefined" ? window : globalThis);

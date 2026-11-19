@@ -49,7 +49,7 @@
     const { PDFDocument, StandardFonts, rgb } = PDFLib;
     const U = ZFS.UI;
     const doc = await PDFDocument.create();
-    doc.setTitle(`${U.title[lang]} ${ZFS.YEAR} — ${d.first || ""} ${d.last || ""}`.trim());
+    doc.setTitle(ZFS.fillY(`${U.title[lang]} ${ZFS.yr(d)} — ${d.first || ""} ${d.last || ""}`.trim(), d));
     doc.setAuthor("Zoo Finance");
     doc.setSubject(U.formNo[lang]);
     doc.setCreator("Zoo Finance online information sheet");
@@ -58,7 +58,7 @@
 
     // --- text safety: Standard fonts only encode WinAnsi; replace anything else.
     const okCache = new Map();
-    const safe = (s, font) => Array.from(String(s).normalize("NFC")).map((ch) => {
+    const safe = (s, font) => Array.from(ZFS.fillY(s, d).normalize("NFC")).map((ch) => {
       if (ch === "\n") return ch;
       const key = ch + (font === bold ? "b" : "r");
       if (!okCache.has(key)) { try { font.encodeText(ch); okCache.set(key, true); } catch { okCache.set(key, false); } }
@@ -100,7 +100,7 @@
     newPage();
     page.drawRectangle({ x: 0, y: H - 74, width: W, height: 74, color: BRAND });
     text("Zoo Finance", M, H - 34, 16, bold, rgb(1, 1, 1));
-    text(`${U.title[lang]} ${ZFS.YEAR}`, M, H - 54, 11, reg, rgb(0.85, 0.95, 0.93));
+    text(`${U.title[lang]} ${ZFS.yr(d)}`, M, H - 54, 11, reg, rgb(0.85, 0.95, 0.93));
     const fno = U.formNo[lang];
     text(fno, W - M - bold.widthOfTextAtSize(fno, 10), H - 34, 10, bold, rgb(1, 1, 1));
     const conf = lang === "fr" ? "Confidentiel" : "Confidential";
@@ -260,7 +260,7 @@
       // taxation year
       page.drawRectangle({ x: W - M - 150, y: y - 18, width: 150, height: 22, borderColor: RULE, borderWidth: 1 });
       text("Année d’imposition", W - M - 146, y - 4, 7, reg, MUTED);
-      text(String(ZFS.YEAR), W - M - 146, y - 14, 10, bold); y -= 30;
+      text(String(ZFS.yr(d)), W - M - 146, y - 14, 10, bold); y -= 30;
       const part = (n, title) => {
         page.drawRectangle({ x: M, y: y - 14, width: FW, height: 17, color: BRAND_LIGHT });
         page.drawRectangle({ x: M, y: y - 14, width: 17, height: 17, color: INK });
@@ -315,7 +315,7 @@
       const C = lang === "fr";
       text(C ? "Certificat de signature électronique" : "Electronic signature certificate", M, y - 6, 15, bold); y -= 22;
       text(C ? `Se rapporte à : ${A.formNo} — ${A.title} (page ${authPageNo})` : `Relates to: ${A.formNo} — ${A.title} (page ${authPageNo})`, M, y, 9, reg, MUTED); y -= 20;
-      const payload = JSON.stringify({ form: A.formNo, year: ZFS.YEAR, last: d.last || "", first: d.first || "", org, software, consent: A.auth(software), signed_at: d.sig_at, typed_name: d.sig_name || "", signature_png: d.sig });
+      const payload = JSON.stringify({ form: A.formNo, year: ZFS.yr(d), last: d.last || "", first: d.first || "", org, software, consent: A.auth(software), signed_at: d.sig_at, typed_name: d.sig_name || "", signature_png: d.sig });
       let hash = "";
       try {
         const c = (typeof crypto !== "undefined" && crypto.subtle) ? crypto : require("crypto").webcrypto;

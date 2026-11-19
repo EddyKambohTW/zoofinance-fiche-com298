@@ -3,15 +3,18 @@
  * builds the PDF in the browser and posts it to the Zoo Finance webhook.
  */
 (function () {
-  const { SECTIONS, UI, YEAR } = window.ZF;
+  const { SECTIONS, UI } = window.ZF;
+  const yr = () => window.ZF.yr(d);
   const CFG = window.ZF_CONFIG || {};
-  const KEY = `zf-com298-${YEAR}`;
+  const KEY = "zf-com298";
+  const OLD_KEYS = ["zf-com298-2026"]; // drafts saved before the year became selectable
   const MAX_AGE_DAYS = CFG.storageDays || 60;
 
   // ---------------- state ----------------
   let S = { d: {}, lang: null, step: 0, remember: true, savedAt: null };
   try {
-    const raw = localStorage.getItem(KEY);
+    let raw = localStorage.getItem(KEY);
+    if (!raw) for (const k of OLD_KEYS) { const o = localStorage.getItem(k); if (o) { raw = o; localStorage.setItem(KEY, o); localStorage.removeItem(k); break; } }
     if (raw) {
       const s = JSON.parse(raw);
       if (s.savedAt && Date.now() - s.savedAt > MAX_AGE_DAYS * 864e5) localStorage.removeItem(KEY);
@@ -41,7 +44,7 @@
   function wipe() { try { localStorage.removeItem(KEY); } catch (e) {} }
 
   // ---------------- helpers ----------------
-  const t = (o) => (o ? o[S.lang] : "");
+  const t = (o) => (o ? window.ZF.fillY(o[S.lang], d) : "");
   const $ = (sel, el) => (el || document).querySelector(sel);
   const h = (tag, attrs, ...kids) => {
     const el = document.createElement(tag);
@@ -218,8 +221,14 @@
     });
   }
 
+  let lastYear = null;
   function onChange() {
     S.downloaded = false;
+    if (lastYear !== null && String(d.tax_year) !== lastYear) {
+      lastYear = String(d.tax_year);
+      delete d.sig; delete d.sig_full; delete d.sig_at; d.sig_ok = false; // authorization is for one taxation year
+      save(true); render(); return;
+    }
     applyVisibility();
     renderProgress();
     save();
@@ -256,7 +265,7 @@
   let lastPdf = null;
   const fileName = () => {
     const clean = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    return `COM-298_${YEAR}_${clean(d.last) || "Client"}_${clean(d.first)}.pdf`.replace(/_\.pdf$/, ".pdf");
+    return `COM-298_${yr()}_${clean(d.last) || "Client"}_${clean(d.first)}.pdf`.replace(/_\.pdf$/, ".pdf");
   };
   async function makePdf() {
     const bytes = await window.ZFPDF.buildPdf(d, S.lang, window.PDFLib, { submittedAt: Date.now(), org: CFG.organisation || "Zoo Finance", software: CFG.downloadSoftware || "ImpôtExpert – PCBMI", impotNet: CFG.impotNet || "", userAgent: navigator.userAgent });
@@ -281,7 +290,7 @@
       fd.append("pdf", blob, fileName());
       fd.append("first", d.first || ""); fd.append("last", d.last || "");
       fd.append("email", d.c_email || ""); fd.append("phone", d.c_phone || d.ph_home || "");
-      fd.append("lang", S.lang); fd.append("year", String(YEAR));
+      fd.append("lang", S.lang); fd.append("year", String(yr()));
       fd.append("spouse", window.ZF.hasSpouse(d) ? `${d.sp_first || ""} ${d.sp_last || ""}`.trim() : "");
       fd.append("flags", (d.elig || []).join(","));
       fd.append("website", $("#hp").value); // honeypot
@@ -297,7 +306,7 @@
       status.className = "status fail";
       status.innerHTML = "";
       status.append(h("strong", {}, t(UI.failTitle)), " ", t(UI.failBody), " ",
-        h("a", { href: `mailto:${CFG.inbox}?subject=${encodeURIComponent(`COM-298 ${YEAR} — ${d.first || ""} ${d.last || ""}`)}` }, CFG.inbox), ".");
+        h("a", { href: `mailto:${CFG.inbox}?subject=${encodeURIComponent(`COM-298 ${yr()} — ${d.first || ""} ${d.last || ""}`)}` }, CFG.inbox), ".");
       if (lastPdf) downloadBlob(lastPdf);
       btn.disabled = false; btn.textContent = label;
     }
@@ -367,7 +376,7 @@
     box.append(h("p", { class: "info" }, t(UI.authWhy)));
     if (expiredMsg) box.append(h("p", { class: "form-err" }, expiredMsg));
     const doc = h("div", { class: "authdoc" },
-      h("p", { class: "muted small" }, `${A.formNo} · Revenu Québec · ${t(UI.authYear)} ${YEAR}`),
+      h("p", { class: "muted small" }, `${A.formNo} · Revenu Québec · ${t(UI.authYear)} ${yr()}`),
       h("p", {}, h("strong", {}, `${d.first || ""} ${d.last || ""}`.trim())),
       h("p", {}, S.lang === "fr" ? A.auth(software) : A.en.auth(software, org)),
       h("p", {}, S.lang === "fr" ? A.understand : "By signing this form, I understand that"),
@@ -478,9 +487,9 @@
   function emailSteps(stage) {
     const inbox = CFG.inbox || "serviceclient@zoofinance.ca";
     const name = `${d.first || ""} ${d.last || ""}`.trim();
-    const subject = `${t(UI.mailSubject)} COM-298 ${YEAR} – ${name}`;
+    const subject = `${t(UI.mailSubject)} COM-298 ${yr()} – ${name}`;
     const body = () => {
-      let b = t(UI.mailBody).replace("{year}", YEAR).replace("{file}", fileName()).replace("{name}", name);
+      let b = t(UI.mailBody).replace("{year}", yr()).replace("{file}", fileName()).replace("{name}", name);
       const extra = [];
       if (window.ZF.needsAuth(d) && d.sig_at) extra.push(t(UI.mailAuth).replace("{signed}", fmtLong(new Date(d.sig_at))));
       const Z = window.ZF;
@@ -581,8 +590,9 @@
   }
 
   function render() {
+    lastYear = String(d.tax_year);
     document.documentElement.lang = S.lang === "fr" ? "fr-CA" : "en-CA";
-    document.title = `${t(UI.title)} ${YEAR} — Zoo Finance`;
+    document.title = `${t(UI.title)} ${yr()} — Zoo Finance`;
     $("#title").textContent = t(UI.title);
     $("#formNo").textContent = t(UI.formNo);
     $("#sub").textContent = t(UI.sub);

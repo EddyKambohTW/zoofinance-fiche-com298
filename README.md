@@ -58,9 +58,14 @@ Webhook → validity check (honeypot empty, PDF present, last name present) → 
 - The email goes out through the connected Gmail account. If you'd rather send from @zoofinance.ca, swap the Gmail node
   for a Microsoft Outlook node (or SMTP) that uses your M365 mailbox.
 
-## Yearly update
-Change `YEAR` at the top of `js/schema.js` and the form number in `UI.formNo`. Then compare the new COM-298 with the
-schema: each question is one line, with its label in both languages.
+## Taxation year
+- The first step asks for the **taxation year**. The default is the current filing period: from October on, the year that is ending; before October, the previous year.
+  Clients can pick up to **5 earlier years** (`MAX_BACK` in `js/schema.js`).
+- Every date-bound label ("December 31, {Y}", "Did you arrive in Canada in {Y}?"), the 70-or-older test (Part 5), the COM-1076.TD.A year,
+  the PDF title, the file name and the email subject follow the chosen year. Labels write the year as `{Y}`.
+- Changing the year clears any COM-1076.TD.A signature, because an authorization covers one taxation year. One sheet per year.
+- The questions follow the 2026-12 version of COM-298. When Revenu Québec publishes a new version, compare it with the schema
+  and update `UI.formNo`.
 
 ## Privacy notes
 - In the default mode the page sends **nothing** over the network. The PDF is built in the client's browser and leaves only by the client's own email. With a webhook set, data goes only to that webhook (enforced by a Content-Security-Policy). The page loads no third-party scripts, fonts or trackers.
