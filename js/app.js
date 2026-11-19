@@ -370,7 +370,7 @@
     canvas.addEventListener("pointerup", end); canvas.addEventListener("pointercancel", end); canvas.addEventListener("pointerleave", end);
     const stampEl = h("p", { class: "ok small" });
     const stamp = () => {
-      stampEl.textContent = d.sig_at ? `✓ ${t(UI.sigSignedOn)} ${new Date(d.sig_at).toLocaleString(S.lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long", timeStyle: "short" })} — ${t(UI.sigValidUntil)} ${fmtLong(window.ZF.authValidUntil(d))}` : "";
+      stampEl.textContent = d.sig_at ? `✓ ${t(UI.sigSignedOn)} ${new Date(d.sig_at).toLocaleString(S.lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long", timeStyle: "short" })}` : "";
     };
     stamp();
     box.append(wrapC, h("div", { class: "row tight" },
@@ -414,7 +414,7 @@
     const body = () => {
       let b = t(UI.mailBody).replace("{year}", YEAR).replace("{file}", fileName()).replace("{name}", name);
       const extra = [];
-      if (window.ZF.needsAuth(d) && d.sig_at) extra.push(t(UI.mailAuth).replace("{signed}", fmtLong(new Date(d.sig_at))).replace("{until}", fmtLong(window.ZF.authValidUntil(d))));
+      if (window.ZF.needsAuth(d) && d.sig_at) extra.push(t(UI.mailAuth).replace("{signed}", fmtLong(new Date(d.sig_at))));
       const docs = window.ZF.docsFor(d);
       if (docs.length) extra.push(t(UI.mailDocs) + "\n" + docs.map((x) => `- ${t(x.l)}`).join("\n"));
       if (extra.length) b = b.replace(/\n\n([^\n]*)\n([^\n]*)$/, "\n\n" + extra.join("\n\n") + "\n\n$1\n$2");

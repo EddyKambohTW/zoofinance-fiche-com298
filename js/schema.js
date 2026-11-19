@@ -481,12 +481,11 @@
     sigMissing: L("Please sign, type your name and check the box.", "Veuillez signer, écrire votre nom et cocher la case."),
     sigExpired: L("Your signature is more than a day old — please sign again so the authorization is still valid when we receive it.", "Votre signature date de plus d’une journée — veuillez signer de nouveau pour que l’autorisation soit encore valide à la réception."),
     sigSignedOn: L("Signed on", "Signé le"),
-    sigValidUntil: L("valid until", "valable jusqu’au"),
     docsTitle: L("Documents to attach to your email", "Documents à joindre à votre courriel"),
     docsHint: L("Based on your answers. Check each one as you attach it.", "Selon vos réponses. Cochez chacun au fur et à mesure que vous le joignez."),
     docsPdf: L("Documents to attach (based on the client’s answers)", "Documents à joindre (selon les réponses du client)"),
     pdfAuthBanner: L("Tax data download authorized (COM-1076.TD.A signed) — download before", "Téléchargement des données autorisé (COM-1076.TD.A signé) — télécharger avant le"),
-    mailAuth: L("Authorization to download my tax data (COM-1076.TD.A) signed on {signed}, valid until {until} — included in the PDF.", "Autorisation de téléchargement de mes données fiscales (COM-1076.TD.A) signée le {signed}, valable jusqu’au {until} — incluse dans le PDF."),
+    mailAuth: L("Authorization to download my tax data (COM-1076.TD.A) signed on {signed} — included in the PDF.", "Autorisation de téléchargement de mes données fiscales (COM-1076.TD.A) signée le {signed} — incluse dans le PDF."),
     mailDocs: L("Documents attached:", "Documents joints :"),
   });
 

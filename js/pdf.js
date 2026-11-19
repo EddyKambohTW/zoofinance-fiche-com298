@@ -270,7 +270,7 @@
       box("Nom de l’organisme autorisé à télécharger les données fiscales du particulier", org, M, FW * 0.62);
       box("Numéro ImpôtNet Québec", meta.impotNet || "", M + FW * 0.62 + 8, FW * 0.38 - 8);
       y -= 44;
-      const foot = `Reproduction du formulaire ${A.formNo} de Revenu Québec, signée électroniquement le ${signedAt.toLocaleString("fr-CA", { dateStyle: "long", timeStyle: "short" })} — voir le certificat de signature à la page suivante. Autorisation valable jusqu’au ${fmtD(ZFS.authValidUntil(d))}.`;
+      const foot = `Reproduction du formulaire ${A.formNo} de Revenu Québec, signée électroniquement le ${signedAt.toLocaleString("fr-CA", { dateStyle: "long", timeStyle: "short" })} — voir le certificat de signature à la page suivante.`;
       for (const ln of wrap(foot, reg, 7.5, FW)) { text(ln, M, y, 7.5, reg, MUTED); y -= 9; }
 
       // ---- signature certificate ----
@@ -290,7 +290,6 @@
         [C ? "Nom écrit par le signataire" : "Name typed by signer", d.sig_name || "—"],
         [C ? "Courriel du signataire" : "Signer’s email", d.c_email || "—"],
         [C ? "Date et heure de signature" : "Date and time signed", `${signedAt.toLocaleString(C ? "fr-CA" : "en-CA", { dateStyle: "long", timeStyle: "medium" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone || "local"}) — UTC ${signedAt.toISOString()}`],
-        [C ? "Valable jusqu’au" : "Valid until", fmtD(ZFS.authValidUntil(d))],
         [C ? "Méthode de signature" : "Signature method", C ? "Signature manuscrite tracée à l’écran, nom dactylographié et case de consentement cochée par le signataire dans le formulaire en ligne de Zoo Finance." : "Handwritten signature drawn on screen, typed name and consent box checked by the signer in Zoo Finance’s online form."],
         [C ? "Consentement" : "Consent", U.sigAgree[lang]],
         [C ? "Organisme autorisé" : "Authorized organization", org],
