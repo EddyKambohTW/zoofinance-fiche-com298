@@ -115,6 +115,42 @@
         });
         wrap.append(fs); break;
       }
+      case "slips": {
+        const Z = window.ZF;
+        const spOn = Z.hasSpouse(d) && d.sp_abroad !== "yes";
+        if (!d.inc_init) { // pre-check what earlier answers already tell us
+          const you = (d.inc_you = d.inc_you || []);
+          const pre = (id, cond) => { if (cond && !you.includes(id)) you.push(id); };
+          pre("rent", d.solidarity === "yes" && d.housing === "tenant");
+          pre("student", (d.p6 || []).includes("tuition"));
+          pre("advance", d.advance === "yes" || d.sen_rl19 === "yes");
+          d.inc_init = true;
+        }
+        const tbl = h("table", { class: "slips" });
+        tbl.append(h("thead", {}, h("tr", {},
+          h("th", {}, t(UI.colSituation)), h("th", {}, t(UI.colFed)), h("th", {}, t(UI.colQc)),
+          h("th", { class: "c" }, t(UI.colYou)), spOn ? h("th", { class: "c" }, t(UI.colSp)) : null)));
+        const tb = h("tbody");
+        Z.SLIPS.forEach((sl) => {
+          const cb = (who) => {
+            const key = `inc_${who}`; const id = `inc_${who}_${sl.id}`;
+            return h("td", { class: "c", "data-label": who === "you" ? t(UI.colYou) : t(UI.colSp) },
+              h("label", { class: "tick", for: id },
+                h("input", { type: "checkbox", id, checked: (d[key] || []).includes(sl.id), onchange: (e) => {
+                  d[key] = (d[key] || []).filter((x) => x !== sl.id); if (e.target.checked) d[key].push(sl.id); onChange();
+                } }),
+                h("span", { class: "sr" }, `${t(sl.l)} — ${who === "you" ? t(UI.colYou) : t(UI.colSp)}`)));
+          };
+          tb.append(h("tr", {},
+            h("td", { class: "sit" }, t(sl.l), sl.note ? h("div", { class: "muted small" }, t(sl.note)) : null),
+            h("td", { "data-label": t(UI.colFed) }, h("strong", {}, Z.slipText(sl.fed, S.lang))),
+            h("td", { "data-label": t(UI.colQc) }, h("strong", {}, Z.slipText(sl.qc, S.lang))),
+            cb("you"), spOn ? cb("sp") : null));
+        });
+        tbl.append(tb);
+        wrap.append(h("div", { class: "tblwrap" }, tbl));
+        break;
+      }
       case "select": {
         const sel = h("select", { id, onchange: (e) => set(e.target.value) });
         optsOf(f).forEach(([v, lab]) => sel.append(h("option", { value: v, selected: store[f.id] === v }, t(lab))));
@@ -388,13 +424,45 @@
     window.addEventListener("resize", () => { if (document.body.contains(canvas) && !drawing) fit(); }, { passive: true });
   }
 
+  // ---------------- tax slips to attach (table with checklist) ----------------
+  function slipsBlock(stage) {
+    const Z = window.ZF;
+    const rows = Z.slipRows(d);
+    if (!Array.isArray(d.docs_ok)) d.docs_ok = [];
+    const spOn = Z.hasSpouse(d) && d.sp_abroad !== "yes";
+    const box = h("div", { class: "estep docs" },
+      h("h3", {}, h("span", { class: "snum" }, "🧾"), t(UI.slipsTitle)),
+      h("p", { class: "muted small" }, t(UI.docsHint)));
+    if (!rows.length) { box.append(h("p", { class: "form-err" }, t(UI.slipsNone))); stage.append(box); return; }
+    const tbl = h("table", { class: "slips" });
+    tbl.append(h("thead", {}, h("tr", {},
+      h("th", { class: "c" }, t(UI.colAttached)), h("th", {}, t(UI.colSituation)),
+      spOn ? h("th", {}, t(UI.colFor)) : null, h("th", {}, t(UI.colFed)), h("th", {}, t(UI.colQc)))));
+    const tb = h("tbody");
+    rows.forEach((r) => {
+      const id = `ok_${r.key}`;
+      tb.append(h("tr", {},
+        h("td", { class: "c" }, h("label", { class: "tick", for: id },
+          h("input", { type: "checkbox", id, checked: d.docs_ok.includes(r.key), onchange: (e) => {
+            d.docs_ok = d.docs_ok.filter((x) => x !== r.key); if (e.target.checked) d.docs_ok.push(r.key); save();
+          } }), h("span", { class: "sr" }, t(r.s.l)))),
+        h("td", { class: "sit" }, t(r.s.l)),
+        spOn ? h("td", { "data-label": t(UI.colFor) }, r.who === "you" ? t(UI.colYou) : t(UI.colSp)) : null,
+        h("td", { "data-label": t(UI.colFed) }, h("strong", {}, Z.slipText(r.s.fed, S.lang))),
+        h("td", { "data-label": t(UI.colQc) }, h("strong", {}, Z.slipText(r.s.qc, S.lang)))));
+    });
+    tbl.append(tb);
+    box.append(h("div", { class: "tblwrap" }, tbl));
+    stage.append(box);
+  }
+
   // ---------------- documents to attach (depends on answers) ----------------
   function docsBlock(stage) {
     const docs = window.ZF.docsFor(d);
     if (!docs.length) return;
     if (!Array.isArray(d.docs_ok)) d.docs_ok = [];
     const box = h("div", { class: "estep docs" },
-      h("h3", {}, h("span", { class: "snum" }, "📎"), t(UI.docsTitle)),
+      h("h3", {}, h("span", { class: "snum" }, "📎"), window.ZF.slipRows(d).length ? t(UI.otherDocs) : t(UI.docsTitle)),
       h("p", { class: "muted small" }, t(UI.docsHint)));
     const fs = h("fieldset", { class: "choices stack" });
     docs.forEach((doc) => fs.append(h("label", { class: "chip box", for: `doc_${doc.id}` },
@@ -415,8 +483,14 @@
       let b = t(UI.mailBody).replace("{year}", YEAR).replace("{file}", fileName()).replace("{name}", name);
       const extra = [];
       if (window.ZF.needsAuth(d) && d.sig_at) extra.push(t(UI.mailAuth).replace("{signed}", fmtLong(new Date(d.sig_at))));
-      const docs = window.ZF.docsFor(d);
-      if (docs.length) extra.push(t(UI.mailDocs) + "\n" + docs.map((x) => `- ${t(x.l)}`).join("\n"));
+      const Z = window.ZF;
+      const slipLines = Z.slipRows(d).map((r) => {
+        const pair = [Z.slipText(r.s.fed, S.lang), Z.slipText(r.s.qc, S.lang)].filter((x) => x && x !== "—").join(" + ");
+        const who = Z.hasSpouse(d) ? ` (${r.who === "you" ? (S.lang === "fr" ? "moi" : "me") : (S.lang === "fr" ? "conjoint" : "spouse")})` : "";
+        return `- ${pair} — ${t(r.s.l)}${who}`;
+      });
+      const docLines = Z.docsFor(d).map((x) => `- ${t(x.l)}`);
+      if (slipLines.length || docLines.length) extra.push(t(UI.mailDocs) + "\n" + [...slipLines, ...docLines].join("\n"));
       if (extra.length) b = b.replace(/\n\n([^\n]*)\n([^\n]*)$/, "\n\n" + extra.join("\n\n") + "\n\n$1\n$2");
       return b;
     };
@@ -543,6 +617,7 @@
         CFG.webhookUrl ? h("button", { type: "button", class: "btn ghost", onclick: async () => downloadBlob(await makePdf()) }, t(UI.download)) : null));
       stage.append(frame);
       if (window.ZF.needsAuth(d)) authBlock(stage);
+      slipsBlock(stage);
       docsBlock(stage);
       if (!CFG.webhookUrl) { stage.querySelector(".info").textContent = t(UI.reviewBodyEmail); emailSteps(stage); $("#nextBtn").hidden = true; }
       else {

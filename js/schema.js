@@ -338,6 +338,51 @@
     ],
   };
 
+  // ---------- Tax slips by situation (Zoo Finance addition) ----------
+  // [id, situation, federal slip, Québec slip, note]
+  const SLIPS = [
+    ["emp", L("Employment (salary, wages, tips)", "Emploi (salaire, paie, pourboires)"), "T4", "Relevé 1"],
+    ["ei", L("Employment Insurance (regular, sickness)", "Assurance-emploi (régulière, maladie)"), "T4E", "—", L("The T4E is also used for the Québec return", "Le T4E sert aussi pour la déclaration du Québec")],
+    ["rqap", L("Québec parental insurance (QPIP — maternity, paternity, parental)", "Assurance parentale (RQAP — maternité, paternité, parentale)"), "—", "Relevé 6", L("The RL-6 is also used for the federal return", "Le relevé 6 sert aussi pour la déclaration fédérale")],
+    ["social", L("Social assistance / social solidarity (last-resort assistance)", "Aide sociale / solidarité sociale (aide financière de dernier recours)"), "T5007", "Relevé 5"],
+    ["cnesst", L("CNESST benefits (work accident, preventive withdrawal)", "Indemnités de la CNESST (accident du travail, retrait préventif)"), "T5007", "Relevé 5"],
+    ["saaq", L("SAAQ benefits (road accident)", "Indemnités de la SAAQ (accident de la route)"), "T5007", "Relevé 5", L("T5007 if issued", "T5007 s’il a été émis")],
+    ["student", L("Post-secondary student (tuition fees)", "Étudiant au postsecondaire (frais de scolarité)"), "T2202", "Relevé 8"],
+    ["bursary", L("Scholarships, bursaries, grants, prizes", "Bourses d’études, subventions, prix"), "T4A (case 105)", "Relevé 1 (case O, code RB)"],
+    ["resp", L("RESP educational assistance payments", "Paiements d’aide aux études d’un REEE"), "T4A", "Relevé 1 (case O, code RU)"],
+    ["oas", L("Old Age Security pension / Guaranteed Income Supplement", "Pension de la Sécurité de la vieillesse / Supplément de revenu garanti"), "T4A(OAS)", "—", L("The T4A(OAS) is also used for the Québec return", "Le T4A(OAS) sert aussi pour la déclaration du Québec")],
+    ["rrq", L("Québec Pension Plan or CPP (retirement, disability, survivor)", "Rente du Québec (RRQ) ou RPC (retraite, invalidité, conjoint survivant)"), "T4A(P)", "Relevé 2"],
+    ["pension", L("Employer pension plan or annuity", "Régime de retraite d’employeur ou rente"), "T4A", "Relevé 2"],
+    ["rrsp", L("RRSP withdrawal (including HBP / LLP)", "Retrait d’un REER (y compris RAP / REEP)"), "T4RSP", "Relevé 2"],
+    ["rrif", L("RRIF / LIF income", "Revenus d’un FERR / FRV"), "T4RIF", "Relevé 2"],
+    ["invest", L("Interest and dividends (bank, investments)", "Intérêts et dividendes (banque, placements)"), "T5", "Relevé 3"],
+    ["trust", L("Mutual funds / trusts", "Fonds communs de placement / fiducies"), "T3", "Relevé 16"],
+    ["sales", L("Sale of investments (stocks, funds)", "Vente de placements (actions, fonds)"), "T5008", "Relevé 18", L("Capital gains are not covered by the volunteer program", "Les gains en capital ne sont pas couverts par le programme des bénévoles")],
+    ["rrspc", L("RRSP contributions", "Cotisations à un REER"), L("RRSP contribution receipt", "Reçu de cotisation REER"), L("Same receipt", "Même reçu")],
+    ["childcare", L("Childcare expenses", "Frais de garde d’enfants"), L("Receipts from the daycare", "Reçus du service de garde"), "Relevé 24", L("Québec no longer accepts receipts — the RL-24 is required", "Le Québec n’accepte plus les reçus — le relevé 24 est requis")],
+    ["rent", L("Tenant on December 31 (solidarity credit)", "Locataire au 31 décembre (crédit pour solidarité)"), "—", "Relevé 31"],
+    ["advance", L("Advance payments (childcare, work premium, seniors’ home support)", "Versements anticipés (frais de garde, prime au travail, maintien à domicile des aînés)"), "—", "Relevé 19"],
+  ].map(([id, l, fed, qc, note]) => ({ id, l, fed, qc, note }));
+  const slipText = (v, lang) => (typeof v === "string" ? v : v[lang]);
+  // selected rows: [{ key, who: "you"|"sp", s }]
+  const slipRows = (d) => {
+    const out = [];
+    for (const who of ["you", "sp"]) {
+      if (who === "sp" && !(hasSpouse(d) && d.sp_abroad !== "yes")) continue;
+      const sel = d[`inc_${who}`] || [];
+      SLIPS.forEach((s) => { if (sel.includes(s.id)) out.push({ key: `slip_${who}_${s.id}`, who, s }); });
+    }
+    return out;
+  };
+  const income = {
+    id: "income", num: "", title: L("Your income and tax slips", "Vos revenus et feuillets d’impôt"),
+    fields: [
+      { id: "inc_info", t: "info", l: L(`Check each situation that applied in ${YEAR}. The table shows the federal slip and the Québec slip (relevé) you should receive — you’ll get a checklist to attach them at the end.`,
+                                         `Cochez chaque situation qui s’appliquait en ${YEAR}. Le tableau indique le feuillet fédéral et le relevé du Québec que vous devriez recevoir — vous aurez une liste à cocher pour les joindre à la fin.`) },
+      { id: "inc", t: "slips", l: L("Situations and slips", "Situations et feuillets") },
+    ],
+  };
+
   // ---------- Notes & consent ----------
   const notes = {
     id: "notes", num: "", title: L("Notes and confirmation", "Notes et confirmation"),
@@ -349,7 +394,7 @@
     ],
   };
 
-  const SECTIONS = [intro, p1, p2, p3, p4, p5, p6, p7, p8, p9, notes];
+  const SECTIONS = [intro, p1, p2, p3, p4, p5, p6, p7, p8, p9, income, notes];
 
   const UI = {
     title: L("Information Sheet", "Fiche personnelle"),
@@ -445,18 +490,13 @@
     const add = (id, en, fr) => { if (!out.some((x) => x.id === id)) out.push({ id, l: L(en, fr) }); };
     const p6 = (k) => has(d, "p6", k);
     const people = Array.isArray(d.people) && d.cohab === "yes" ? d.people : [];
-    add("slips", "Your income slips (T4, RL-1, T4A, T5, RL-3, T4E, RL-2, pension slips, etc.)", "Vos feuillets et relevés de revenus (T4, relevé 1, T4A, T5, relevé 3, T4E, relevé 2, feuillets de pension, etc.)");
     if (d.first_fed !== "yes" && d.first_qc !== "yes") add("noa", "Your most recent notices of assessment (federal and Québec), if you have them", "Vos derniers avis de cotisation (fédéral et Québec), si vous les avez");
-    if (hasSpouse(d) && d.sp_abroad !== "yes") add("spslips", "Your spouse’s income slips", "Les feuillets et relevés de revenus de votre conjoint");
-    if (d.solidarity === "yes" && d.housing === "tenant") add("rl31", "RL-31 slip (from your landlord)", "Relevé 31 (remis par votre propriétaire)");
     if (d.solidarity === "yes" && d.housing === "owner") add("taxbill", "Municipal tax bill (for the roll number)", "Compte de taxes municipales (pour le numéro matricule)");
     if (p6("medical")) add("medical", "Receipts for medical expenses", "Reçus des frais médicaux");
     if (p6("suprec") || p6("suppaid")) add("support", "Support judgment or agreement, and proof of the amounts received or paid", "Jugement ou entente de pension alimentaire, et preuve des montants reçus ou payés");
-    if (p6("tuition")) add("tuition", "Tuition slips (T2202 and RL-8)", "Feuillets de frais de scolarité (T2202 et relevé 8)");
     if (p6("impair") && !p6("severe")) add("t2201", "If this is a new request: forms T2201 and TP-752.0.14 completed by a health professional", "S’il s’agit d’une nouvelle demande : formulaires T2201 et TP-752.0.14 remplis par un professionnel de la santé");
     if (p6("unable")) add("tp752", "Form TP-752.0.14 (unable to live alone)", "Formulaire TP-752.0.14 (incapacité de vivre seul)");
     if (p6("graduate")) add("grad", "Diploma and proof of employment in a remote resource region", "Diplôme et preuve d’emploi dans une région ressource éloignée");
-    if (d.advance === "yes" || (is70(d) && d.sen_rl19 === "yes")) add("rl19", "RL-19 slip or statement of advance payments", "Relevé 19 ou état des versements anticipés");
     if (is70(d) && d.sen_res === "rpa") add("rpa", "Your private seniors’ residence lease and its Schedule 6", "Bail de la résidence privée pour aînés et son annexe 6");
     if (is70(d) && d.sen_res === "apartment") add("lease", "Your lease (or proof of rent paid)", "Votre bail (ou une preuve du loyer payé)");
     if (is70(d) && ["own", "apartment", "condo"].includes(d.sen_res) && d.sen_paid === "yes") add("homesupport", "Receipts for home-support services", "Reçus des services de maintien à domicile");
@@ -487,9 +527,15 @@
     pdfAuthBanner: L("Tax data download authorized (COM-1076.TD.A signed) — download before", "Téléchargement des données autorisé (COM-1076.TD.A signé) — télécharger avant le"),
     mailAuth: L("Authorization to download my tax data (COM-1076.TD.A) signed on {signed} — included in the PDF.", "Autorisation de téléchargement de mes données fiscales (COM-1076.TD.A) signée le {signed} — incluse dans le PDF."),
     mailDocs: L("Documents attached:", "Documents joints :"),
+    colSituation: L("Situation", "Situation"), colFed: L("Federal slip", "Feuillet fédéral"), colQc: L("Québec slip", "Relevé du Québec"),
+    colYou: L("You", "Vous"), colSp: L("Spouse", "Conjoint"), colFor: L("For", "Pour"), colAttached: L("Attached", "Joint"),
+    slipsTitle: L("Tax slips to attach", "Feuillets et relevés à joindre"),
+    slipsNone: L("No situation checked in “Your income and tax slips”. Go back to add your slips.", "Aucune situation cochée dans « Vos revenus et feuillets d’impôt ». Revenez en arrière pour ajouter vos feuillets."),
+    otherDocs: L("Other documents", "Autres documents"),
+    slipsPdf: L("Tax slips to provide (situations checked by the client)", "Feuillets et relevés à fournir (situations cochées par le client)"),
   });
 
-  const api = { YEAR, SECTIONS, UI, hasSpouse, ageAtYearEnd, is70, L, AUTH, authValidUntil, needsAuth, docsFor };
+  const api = { YEAR, SECTIONS, UI, hasSpouse, ageAtYearEnd, is70, L, AUTH, authValidUntil, needsAuth, docsFor, SLIPS, slipRows, slipText };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ZF = api;
 })(typeof window !== "undefined" ? window : globalThis);

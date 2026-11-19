@@ -134,3 +134,26 @@ a.btn { display: inline-block; text-decoration: none; }
 .auth .consent { margin-top: 12px; }
 .row.tight { margin: 6px 0; }
 .docs .choices { margin-top: 8px; }
+
+/* slips table */
+.tblwrap { overflow-x: auto; }
+table.slips { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.slips th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); padding: 8px; border-bottom: 2px solid var(--rule); }
+table.slips td { padding: 9px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.slips .c { text-align: center; width: 64px; }
+table.slips tr:has(input:checked) td { background: var(--brand-soft); }
+table.slips .sit { min-width: 200px; }
+.tick { display: inline-grid; place-items: center; width: 32px; height: 32px; cursor: pointer; }
+.tick input { width: 19px; height: 19px; accent-color: var(--brand); margin: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 600px) {
+  table.slips thead { display: none; }
+  table.slips, table.slips tbody, table.slips tr, table.slips td { display: block; width: 100%; }
+  table.slips tr { border: 1px solid var(--rule); border-radius: 8px; margin-bottom: 10px; padding: 6px 4px; }
+  table.slips td { border: 0; padding: 4px 8px; }
+  table.slips td[data-label]::before { content: attr(data-label) " : "; color: var(--muted); font-size: 12px; }
+  table.slips .c { text-align: left; width: auto; display: inline-block; }
+  table.slips td.sit { font-weight: 600; }
+  table.slips tr:has(input:checked) { background: var(--brand-soft); }
+  table.slips tr:has(input:checked) td { background: transparent; }
+}

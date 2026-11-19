@@ -162,14 +162,47 @@
       page.drawLine({ start: { x: M, y: y + 3 }, end: { x: W - M, y: y + 3 }, thickness: 0.4, color: RULE });
     };
 
+    // table of slips: [checkbox?] situation (who) | federal | québec
+    const slipTable = (rows, withBox) => {
+      const sp = ZFS.hasSpouse(d);
+      const x0 = M + (withBox ? 18 : 0), cFed = M + 330, cQc = M + 420, colW = W - M - cQc;
+      ensure(20);
+      text(U.colSituation[lang].toUpperCase(), x0, y - 9, 7, bold, MUTED);
+      text(U.colFed[lang].toUpperCase(), cFed, y - 9, 7, bold, MUTED);
+      text(U.colQc[lang].toUpperCase(), cQc, y - 9, 7, bold, MUTED);
+      y -= 14;
+      page.drawLine({ start: { x: M, y: y + 2 }, end: { x: W - M, y: y + 2 }, thickness: 0.8, color: BRAND });
+      for (const r of rows) {
+        const who = sp ? ` (${r.who === "you" ? U.colYou[lang] : U.colSp[lang]})` : "";
+        const sl = wrap(r.s.l[lang] + who, reg, 8.5, cFed - x0 - 10);
+        const fl = wrap(ZFS.slipText(r.s.fed, lang), bold, 8.5, cQc - cFed - 8);
+        const ql = wrap(ZFS.slipText(r.s.qc, lang), bold, 8.5, colW);
+        const h = Math.max(sl.length, fl.length, ql.length) * 10.5 + 7;
+        ensure(h);
+        if (withBox) {
+          page.drawRectangle({ x: M + 2, y: y - 11, width: 9, height: 9, borderColor: MUTED, borderWidth: 0.8 });
+          if ((d.docs_ok || []).includes(r.key)) {
+            page.drawLine({ start: { x: M + 3.5, y: y - 6.5 }, end: { x: M + 6, y: y - 9.5 }, thickness: 1.4, color: BRAND });
+            page.drawLine({ start: { x: M + 6, y: y - 9.5 }, end: { x: M + 10, y: y - 3 }, thickness: 1.4, color: BRAND });
+          }
+        }
+        let yy = y - 9; for (const ln of sl) { text(ln, x0, yy, 8.5, reg); yy -= 10.5; }
+        yy = y - 9; for (const ln of fl) { text(ln, cFed, yy, 8.5, bold); yy -= 10.5; }
+        yy = y - 9; for (const ln of ql) { text(ln, cQc, yy, 8.5, bold); yy -= 10.5; }
+        y -= h;
+        page.drawLine({ start: { x: M, y: y + 3 }, end: { x: W - M, y: y + 3 }, thickness: 0.4, color: RULE });
+      }
+    };
+
     for (const sec of ZFS.SECTIONS) {
-      if (sec.id === "start") continue;
+      if (sec.id === "start" || sec.id === "income") continue; // income → shown as the slips checklist below
       if (sec.show && !sec.show(d)) continue;
       sectionHeader(sec);
       for (const f of sec.fields) {
         if (!visible(f, d, d)) continue;
         if (f.t === "info") continue;
         if (f.t === "heading") { subHeader(f.l[lang]); continue; }
+        if (f.t === "slips") { const rs = ZFS.slipRows(d); rs.length ? slipTable(rs, false) : row(f.l[lang], U.none[lang]); continue; }
         if (f.t === "repeat") {
           const items = d[f.id] || [];
           items.forEach((it, i) => {
@@ -182,7 +215,11 @@
       }
     }
 
-    // documents to attach
+    // tax slips to attach (checklist)
+    const sRows = ZFS.slipRows(d);
+    if (sRows.length) { sectionHeader({ num: "", title: U.slipsPdf }); slipTable(sRows, true); y -= 6; }
+
+    // other documents to attach
     const docs = ZFS.docsFor(d);
     if (docs.length) {
       sectionHeader({ num: "", title: U.docsPdf });

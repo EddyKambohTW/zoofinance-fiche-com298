@@ -18,6 +18,10 @@ fill in online instead of printing. It runs on **GitHub Pages**, has no server a
      with the signature and a signature certificate (date and time, email, device, SHA-256 fingerprint). **The authorization is valid for 2 days**, so download the data within 48 hours of receiving the email.
      A signature older than 24 hours is cleared and the client is asked to sign again. Organization name, ImpôtNet number and software
      are set in `config.js`.
+   - **Tax slips by situation:** a step "Your income and tax slips" shows a table (situation | federal slip | Québec slip | you | spouse),
+     e.g. employment T4 + RL-1, EI T4E, QPIP RL-6, social assistance T5007 + RL-5, student T2202 + RL-8, bursaries T4A + RL-1 (code RB),
+     OAS T4A(OAS), QPP T4A(P) + RL-2, RRSP T4RSP + RL-2, investments T5 + RL-3, childcare RL-24, tenant RL-31. The client checks what
+     applied, and the last step, the PDF and the email repeat the slips as an "attached" checklist. Edit the list in `SLIPS` in `js/schema.js`.
    - **Documents to attach:** a checklist built from the answers (RL-31 for tenants, medical receipts, support judgment, RL-19,
      RPA lease and Schedule 6, newcomer proof, and so on). It appears on screen, in the PDF and in the email body.
 4. *Optional automatic mode:* put an n8n webhook URL in `config.js` → `webhookUrl` and the last step becomes a single
