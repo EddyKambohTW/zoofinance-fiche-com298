@@ -123,6 +123,19 @@
     text(lang === "fr" ? "J J   M M   A A A A" : "D D   M M   Y Y Y Y", bx + 8, by + 8, 8, reg, RULE);
     y = H - 160;
 
+    // tax-data download deadline (COM-1076.TD.A is valid 2 days after signing)
+    const authOn = ZFS.needsAuth(d) && d.sig && d.sig_at;
+    const fmtD = (dt) => dt.toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { day: "numeric", month: "long", year: "numeric" });
+    if (authOn) {
+      const until = ZFS.authValidUntil(d);
+      const msg = `${U.pdfAuthBanner[lang]} ${fmtD(until)}`;
+      const lines = wrap(msg, bold, 9.5, W - 2 * M - 20);
+      const h = 12 + lines.length * 12;
+      page.drawRectangle({ x: M, y: y - h + 6, width: W - 2 * M, height: h, color: rgb(0.99, 0.91, 0.86) });
+      let yy = y - 8; for (const ln of lines) { text(ln, M + 10, yy, 9.5, bold, rgb(0.6, 0.18, 0.05)); yy -= 12; }
+      y -= h + 8;
+    }
+
     // eligibility flags
     const elig = d.elig || [];
     if (elig.length) {
@@ -177,6 +190,129 @@
         }
         row(f.l[lang], valueText(f, d[f.id], d, lang), f.sub ? 12 : 0);
       }
+    }
+
+    // documents to attach
+    const docs = ZFS.docsFor(d);
+    if (docs.length) {
+      sectionHeader({ num: "", title: U.docsPdf });
+      const ok = d.docs_ok || [];
+      for (const doc of docs) {
+        const lines = wrap(doc.l[lang], reg, 9, W - 2 * M - 26);
+        const h = lines.length * 11 + 6;
+        ensure(h);
+        page.drawRectangle({ x: M + 2, y: y - 11, width: 9, height: 9, borderColor: MUTED, borderWidth: 0.8 });
+        if (ok.includes(doc.id)) {
+          page.drawLine({ start: { x: M + 3.5, y: y - 6.5 }, end: { x: M + 6, y: y - 9.5 }, thickness: 1.4, color: BRAND });
+          page.drawLine({ start: { x: M + 6, y: y - 9.5 }, end: { x: M + 10, y: y - 3 }, thickness: 1.4, color: BRAND });
+        }
+        let yy = y - 9; for (const ln of lines) { text(ln, M + 20, yy, 9, reg); yy -= 11; }
+        y -= h;
+      }
+    }
+
+    // COM-1076.TD.A, reproduced and signed electronically
+    if (authOn) await authPages();
+
+    async function authPages() {
+      const A = ZFS.AUTH;
+      const software = meta.software || "ImpôtExpert – PCBMI";
+      const org = meta.org || "Zoo Finance";
+      const signedAt = new Date(d.sig_at);
+      const dd = (t) => `${String(t.getDate()).padStart(2, "0")}-${String(t.getMonth() + 1).padStart(2, "0")}-${t.getFullYear()}`;
+      const FW = W - 2 * M;
+      newPage();
+      const authPageNo = pages.length;
+      text(A.formNo, M, y - 4, 8, reg, MUTED);
+      text("Revenu Québec", W - M - bold.widthOfTextAtSize("Revenu Québec", 10), y - 4, 10, bold, INK);
+      y -= 26;
+      text(A.title, M, y, 14, bold); y -= 16;
+      text(A.program, M, y, 10, reg, MUTED); y -= 16;
+      for (const para of A.intro) { for (const ln of wrap(para, reg, 8, FW)) { text(ln, M, y, 8, reg, MUTED); y -= 9.5; } y -= 4; }
+      y -= 4;
+      // taxation year
+      page.drawRectangle({ x: W - M - 150, y: y - 18, width: 150, height: 22, borderColor: RULE, borderWidth: 1 });
+      text("Année d’imposition", W - M - 146, y - 4, 7, reg, MUTED);
+      text(String(ZFS.YEAR), W - M - 146, y - 14, 10, bold); y -= 30;
+      const part = (n, title) => {
+        page.drawRectangle({ x: M, y: y - 14, width: FW, height: 17, color: BRAND_LIGHT });
+        page.drawRectangle({ x: M, y: y - 14, width: 17, height: 17, color: INK });
+        text(n, M + 6, y - 9, 9, bold, rgb(1, 1, 1));
+        text(title, M + 24, y - 9, 9.5, bold, INK);
+        y -= 22;
+      };
+      const box = (label, value, x, w) => {
+        page.drawRectangle({ x, y: y - 26, width: w, height: 28, borderColor: RULE, borderWidth: 1 });
+        text(label, x + 4, y - 7, 7, reg, MUTED);
+        text(value || "", x + 4, y - 20, 10, bold);
+      };
+      part("1", "Renseignements sur le particulier");
+      box("Nom de famille", d.last, M, FW / 2 - 4); box("Prénom", d.first, M + FW / 2 + 4, FW / 2 - 4); y -= 38;
+      part("2", "Autorisation");
+      const at = wrap(A.auth(software), reg, 8.5, FW - 90);
+      const atTop = y;
+      for (const ln of at) { text(ln, M, y - 8, 8.5, reg); y -= 10.5; }
+      // Oui ☒  Non ☐
+      const bx = W - M - 80, by = atTop - (at.length * 10.5) + 2;
+      page.drawRectangle({ x: bx, y: by, width: 9, height: 9, borderColor: INK, borderWidth: 0.8 });
+      page.drawLine({ start: { x: bx + 1.5, y: by + 1.5 }, end: { x: bx + 7.5, y: by + 7.5 }, thickness: 1.2, color: INK });
+      page.drawLine({ start: { x: bx + 1.5, y: by + 7.5 }, end: { x: bx + 7.5, y: by + 1.5 }, thickness: 1.2, color: INK });
+      text("Oui", bx + 12, by + 1, 8.5, reg);
+      page.drawRectangle({ x: bx + 40, y: by, width: 9, height: 9, borderColor: INK, borderWidth: 0.8 });
+      text("Non", bx + 52, by + 1, 8.5, reg);
+      y -= 8;
+      text(A.understand, M, y - 8, 8.5, reg); y -= 12;
+      for (const b of A.bullets) { const ls = wrap(b, reg, 8.5, FW - 14); ls.forEach((ln, i) => { if (i === 0) text("•", M + 2, y - 8, 8.5, reg); text(ln, M + 12, y - 8, 8.5, reg); y -= 10.5; }); }
+      y -= 10;
+      // signature + date
+      const sigW = FW * 0.62;
+      page.drawRectangle({ x: M, y: y - 62, width: sigW, height: 64, borderColor: RULE, borderWidth: 1 });
+      page.drawRectangle({ x: M + sigW + 8, y: y - 62, width: FW - sigW - 8, height: 64, borderColor: RULE, borderWidth: 1 });
+      try {
+        const png = await doc.embedPng(d.sig);
+        const sc = Math.min((sigW - 20) / png.width, 46 / png.height);
+        page.drawImage(png, { x: M + 10, y: y - 58, width: png.width * sc, height: png.height * sc });
+      } catch (e) { text(d.sig_name || "", M + 10, y - 40, 14, bold); }
+      text("Signature du particulier", M + 4, y - 72, 7.5, reg, MUTED);
+      text(dd(signedAt), M + sigW + 18, y - 36, 12, bold);
+      text("Date", M + sigW + 12, y - 72, 7.5, reg, MUTED);
+      y -= 88;
+      box("Nom de l’organisme autorisé à télécharger les données fiscales du particulier", org, M, FW * 0.62);
+      box("Numéro ImpôtNet Québec", meta.impotNet || "", M + FW * 0.62 + 8, FW * 0.38 - 8);
+      y -= 44;
+      const foot = `Reproduction du formulaire ${A.formNo} de Revenu Québec, signée électroniquement le ${signedAt.toLocaleString("fr-CA", { dateStyle: "long", timeStyle: "short" })} — voir le certificat de signature à la page suivante. Autorisation valable jusqu’au ${fmtD(ZFS.authValidUntil(d))}.`;
+      for (const ln of wrap(foot, reg, 7.5, FW)) { text(ln, M, y, 7.5, reg, MUTED); y -= 9; }
+
+      // ---- signature certificate ----
+      newPage();
+      const C = lang === "fr";
+      text(C ? "Certificat de signature électronique" : "Electronic signature certificate", M, y - 6, 15, bold); y -= 22;
+      text(C ? `Se rapporte à : ${A.formNo} — ${A.title} (page ${authPageNo})` : `Relates to: ${A.formNo} — ${A.title} (page ${authPageNo})`, M, y, 9, reg, MUTED); y -= 20;
+      const payload = JSON.stringify({ form: A.formNo, year: ZFS.YEAR, last: d.last || "", first: d.first || "", org, software, consent: A.auth(software), signed_at: d.sig_at, typed_name: d.sig_name || "", signature_png: d.sig });
+      let hash = "";
+      try {
+        const c = (typeof crypto !== "undefined" && crypto.subtle) ? crypto : require("crypto").webcrypto;
+        const buf = await c.subtle.digest("SHA-256", new TextEncoder().encode(payload));
+        hash = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      } catch (e) { hash = "—"; }
+      const rows = [
+        [C ? "Signataire" : "Signer", `${d.first || ""} ${d.last || ""}`.trim()],
+        [C ? "Nom écrit par le signataire" : "Name typed by signer", d.sig_name || "—"],
+        [C ? "Courriel du signataire" : "Signer’s email", d.c_email || "—"],
+        [C ? "Date et heure de signature" : "Date and time signed", `${signedAt.toLocaleString(C ? "fr-CA" : "en-CA", { dateStyle: "long", timeStyle: "medium" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone || "local"}) — UTC ${signedAt.toISOString()}`],
+        [C ? "Valable jusqu’au" : "Valid until", fmtD(ZFS.authValidUntil(d))],
+        [C ? "Méthode de signature" : "Signature method", C ? "Signature manuscrite tracée à l’écran, nom dactylographié et case de consentement cochée par le signataire dans le formulaire en ligne de Zoo Finance." : "Handwritten signature drawn on screen, typed name and consent box checked by the signer in Zoo Finance’s online form."],
+        [C ? "Consentement" : "Consent", U.sigAgree[lang]],
+        [C ? "Organisme autorisé" : "Authorized organization", org],
+        [C ? "Appareil / navigateur" : "Device / browser", meta.userAgent || "—"],
+        [C ? "Empreinte SHA-256 de l’autorisation" : "SHA-256 fingerprint of the authorization", hash],
+      ];
+      for (const [k, v] of rows) row(k, v, 0);
+      y -= 10;
+      const expl = C
+        ? "L’empreinte est calculée sur le contenu de l’autorisation (texte, nom, date, organisme et image de la signature). Toute modification de ces éléments produirait une empreinte différente."
+        : "The fingerprint is computed from the authorization content (text, name, date, organization and signature image). Any change to these would produce a different fingerprint.";
+      for (const ln of wrap(expl, reg, 8, FW)) { text(ln, M, y, 8, reg, MUTED); y -= 10; }
     }
 
     // footer on every page

@@ -179,7 +179,7 @@
     id: "p4", num: "4", title: L("Tax data download services", "Services de téléchargement des données fiscales"),
     fields: [
       { id: "download", t: "yn", l: L("Do you want us to use the CRA and Revenu Québec tax data download services to fill in parts of your returns automatically?", "Voulez-vous que nous utilisions les services de téléchargement des données fiscales de l’ARC et de Revenu Québec pour remplir automatiquement certaines parties de vos déclarations ?") },
-      { id: "dl_info", t: "info", show: (d) => d.download === "yes", l: L("You will need to sign the CRA Authorization request – signature page, and give us your Revenu Québec download code or sign form COM-1076.TD.A-V.", "Vous devrez signer la Demande d’autorisation − Page de signature de l’ARC, et nous fournir votre code de téléchargement de Revenu Québec ou signer le formulaire COM-1076.TD.A.") },
+      { id: "dl_info", t: "info", show: (d) => d.download === "yes", l: L("You’ll sign the Revenu Québec authorization (COM-1076.TD.A) online at the last step. For the CRA, we’ll send you the Authorization request – signature page to sign.", "Vous signerez l’autorisation de Revenu Québec (COM-1076.TD.A) en ligne à la dernière étape. Pour l’ARC, nous vous enverrons la Demande d’autorisation − Page de signature à signer.") },
     ],
   };
 
@@ -406,7 +406,91 @@
     lang: L("Français", "English"),
   };
 
-  const api = { YEAR, SECTIONS, UI, hasSpouse, ageAtYearEnd, is70, L };
+
+  // ---------- COM-1076.TD.A — Authorization to download tax data (signed online when Part 4 = yes) ----------
+  // French text reproduces the official form COM-1076.TD.A (2023-12). The English text is a courtesy translation
+  // shown on screen; the signed page in the PDF is always the French form.
+  const AUTH = {
+    formNo: "COM-1076.TD.A (2023-12)",
+    title: "Autorisation relative au téléchargement de données fiscales",
+    program: "Service d’aide en impôt – Programme des bénévoles",
+    intro: [
+      "Ce formulaire s’adresse à vous si vous êtes un particulier et que vous voulez autoriser un organisme à télécharger, dans le cadre du Service d’aide en impôt – Programme des bénévoles, certaines de vos données fiscales à l’aide d’un logiciel autorisé. Il s’agit de données qui peuvent figurer sur les relevés et les feuillets de renseignements, de données relatives aux acomptes provisionnels et, s’il y a lieu, de données relatives aux intérêts versés par Revenu Québec. Pour connaître les données qui peuvent être téléchargées, rendez-vous dans Mon dossier pour les citoyens.",
+      "Si vous ne donnez pas votre autorisation à un organisme pour qu’il puisse télécharger vos données, vous devrez lui fournir les données fiscales nécessaires à la production de votre déclaration de revenus.",
+      "Notez que, tant que l’organisme n’a pas téléchargé vos données, il est possible de retirer votre autorisation en communiquant directement avec lui.",
+      "Notez également que vous n’avez pas à nous transmettre ce formulaire, à moins que nous en fassions la demande. Cependant, vous devez le conserver pendant six ans après la date où vous avez produit votre déclaration de revenus.",
+    ],
+    auth: (software) => `J’autorise l’organisme mentionné ci-après à télécharger, à l’aide du logiciel ${software}, qui est utilisé à l’extérieur de l’environnement sécurisé de Revenu Québec, mes données fiscales nécessaires à la production de ma déclaration de revenus pour l’année d’imposition visée par ce formulaire. Cette autorisation est valable pour les deux jours suivant la date inscrite ci-dessous.`,
+    understand: "En signant ce formulaire, je comprends",
+    bullets: [
+      "qu’il est toujours de ma responsabilité de déclarer tous mes revenus dans ma déclaration, y compris ceux à l’égard desquels l’organisme ne pourra pas télécharger de données;",
+      "que Revenu Québec reçoit des données fiscales de la part de tiers et qu’il aura obtenu la plupart des relevés et des renseignements fiscaux pour l’année d’imposition visée au début de mars de l’année suivant celle-ci.",
+    ],
+    en: {
+      auth: (software, org) => `I authorize ${org} to download, using the ${software} software (used outside Revenu Québec’s secure environment), my tax data needed to prepare my income tax return for the taxation year covered by this form. This authorization is valid for the two days following the date entered below.`,
+      bullets: [
+        "it is always my responsibility to report all my income on my return, including income for which the organization cannot download data;",
+        "Revenu Québec receives tax data from third parties and will have most slips and tax information for the year by early March of the following year.",
+      ],
+      note: "Unofficial translation for your information. The form you sign is Revenu Québec’s French form COM-1076.TD.A.",
+    },
+  };
+  const addDays = (iso, n) => { const t = new Date(iso); t.setDate(t.getDate() + n); return t; };
+  const authValidUntil = (d) => (d.sig_at ? addDays(d.sig_at, 2) : null);
+  const needsAuth = (d) => d.download === "yes";
+
+  // ---------- Documents to attach, depending on the answers ----------
+  function docsFor(d) {
+    const out = [];
+    const add = (id, en, fr) => { if (!out.some((x) => x.id === id)) out.push({ id, l: L(en, fr) }); };
+    const p6 = (k) => has(d, "p6", k);
+    const people = Array.isArray(d.people) && d.cohab === "yes" ? d.people : [];
+    add("slips", "Your income slips (T4, RL-1, T4A, T5, RL-3, T4E, RL-2, pension slips, etc.)", "Vos feuillets et relevés de revenus (T4, relevé 1, T4A, T5, relevé 3, T4E, relevé 2, feuillets de pension, etc.)");
+    if (d.first_fed !== "yes" && d.first_qc !== "yes") add("noa", "Your most recent notices of assessment (federal and Québec), if you have them", "Vos derniers avis de cotisation (fédéral et Québec), si vous les avez");
+    if (hasSpouse(d) && d.sp_abroad !== "yes") add("spslips", "Your spouse’s income slips", "Les feuillets et relevés de revenus de votre conjoint");
+    if (d.solidarity === "yes" && d.housing === "tenant") add("rl31", "RL-31 slip (from your landlord)", "Relevé 31 (remis par votre propriétaire)");
+    if (d.solidarity === "yes" && d.housing === "owner") add("taxbill", "Municipal tax bill (for the roll number)", "Compte de taxes municipales (pour le numéro matricule)");
+    if (p6("medical")) add("medical", "Receipts for medical expenses", "Reçus des frais médicaux");
+    if (p6("suprec") || p6("suppaid")) add("support", "Support judgment or agreement, and proof of the amounts received or paid", "Jugement ou entente de pension alimentaire, et preuve des montants reçus ou payés");
+    if (p6("tuition")) add("tuition", "Tuition slips (T2202 and RL-8)", "Feuillets de frais de scolarité (T2202 et relevé 8)");
+    if (p6("impair") && !p6("severe")) add("t2201", "If this is a new request: forms T2201 and TP-752.0.14 completed by a health professional", "S’il s’agit d’une nouvelle demande : formulaires T2201 et TP-752.0.14 remplis par un professionnel de la santé");
+    if (p6("unable")) add("tp752", "Form TP-752.0.14 (unable to live alone)", "Formulaire TP-752.0.14 (incapacité de vivre seul)");
+    if (p6("graduate")) add("grad", "Diploma and proof of employment in a remote resource region", "Diplôme et preuve d’emploi dans une région ressource éloignée");
+    if (d.advance === "yes" || (is70(d) && d.sen_rl19 === "yes")) add("rl19", "RL-19 slip or statement of advance payments", "Relevé 19 ou état des versements anticipés");
+    if (is70(d) && d.sen_res === "rpa") add("rpa", "Your private seniors’ residence lease and its Schedule 6", "Bail de la résidence privée pour aînés et son annexe 6");
+    if (is70(d) && d.sen_res === "apartment") add("lease", "Your lease (or proof of rent paid)", "Votre bail (ou une preuve du loyer payé)");
+    if (is70(d) && ["own", "apartment", "condo"].includes(d.sen_res) && d.sen_paid === "yes") add("homesupport", "Receipts for home-support services", "Reçus des services de maintien à domicile");
+    if (people.some((p) => p.claim === "yes" && p.postsec === "yes")) add("deptuition", "Tuition slips (T2202 / RL-8) of the person in post-secondary studies", "Feuillets de frais de scolarité (T2202 / relevé 8) de la personne aux études postsecondaires");
+    if (people.some((p) => p.impair === "yes" && p.severe !== "yes")) add("dept2201", "For a person living with you with an impairment (new request): T2201 and TP-752.0.14", "Pour une personne à charge ayant une déficience (nouvelle demande) : T2201 et TP-752.0.14");
+    if (d.arrived === "yes" || (hasSpouse(d) && d.sp_immig === "yes")) add("newcomer", "Proof of arrival date (immigration document) and of income earned before arriving", "Preuve de la date d’arrivée (document d’immigration) et des revenus gagnés avant l’arrivée");
+    if (hasSpouse(d) && d.sp_abroad === "yes") add("spworld", "Proof of your spouse’s worldwide income", "Preuve du revenu mondial de votre conjoint");
+    if (d.crypto === "yes" || (hasSpouse(d) && d.sp_crypto === "yes")) add("crypto", "Statement of cryptoasset transactions", "Relevé des transactions de cryptoactifs");
+    return out;
+  }
+
+  Object.assign(UI, {
+    authTitle: L("Authorization to download your tax data (COM-1076.TD.A)", "Autorisation de téléchargement de vos données fiscales (COM-1076.TD.A)"),
+    authWhy: L("You answered Yes in Part 4. Sign this authorization so we can download your Revenu Québec slips. Send your email today — the authorization is valid for 2 days.",
+               "Vous avez répondu Oui à la partie 4. Signez cette autorisation pour que nous puissions télécharger vos relevés de Revenu Québec. Envoyez votre courriel aujourd’hui — l’autorisation est valable 2 jours."),
+    authYear: L("Taxation year", "Année d’imposition"),
+    authOrg: L("Organization authorized to download your tax data", "Organisme autorisé à télécharger vos données fiscales"),
+    sigLabel: L("Sign here with your finger or mouse", "Signez ici avec votre doigt ou votre souris"),
+    sigClear: L("Clear signature", "Effacer la signature"),
+    sigName: L("Type your full name", "Écrivez votre nom complet"),
+    sigAgree: L("I authorize the download of my tax data as described above and I sign this form electronically.", "J’autorise le téléchargement de mes données fiscales tel que décrit ci-dessus et je signe ce formulaire électroniquement."),
+    sigMissing: L("Please sign, type your name and check the box.", "Veuillez signer, écrire votre nom et cocher la case."),
+    sigExpired: L("Your signature is more than a day old — please sign again so the authorization is still valid when we receive it.", "Votre signature date de plus d’une journée — veuillez signer de nouveau pour que l’autorisation soit encore valide à la réception."),
+    sigSignedOn: L("Signed on", "Signé le"),
+    sigValidUntil: L("valid until", "valable jusqu’au"),
+    docsTitle: L("Documents to attach to your email", "Documents à joindre à votre courriel"),
+    docsHint: L("Based on your answers. Check each one as you attach it.", "Selon vos réponses. Cochez chacun au fur et à mesure que vous le joignez."),
+    docsPdf: L("Documents to attach (based on the client’s answers)", "Documents à joindre (selon les réponses du client)"),
+    pdfAuthBanner: L("Tax data download authorized (COM-1076.TD.A signed) — download before", "Téléchargement des données autorisé (COM-1076.TD.A signé) — télécharger avant le"),
+    mailAuth: L("Authorization to download my tax data (COM-1076.TD.A) signed on {signed}, valid until {until} — included in the PDF.", "Autorisation de téléchargement de mes données fiscales (COM-1076.TD.A) signée le {signed}, valable jusqu’au {until} — incluse dans le PDF."),
+    mailDocs: L("Documents attached:", "Documents joints :"),
+  });
+
+  const api = { YEAR, SECTIONS, UI, hasSpouse, ageAtYearEnd, is70, L, AUTH, authValidUntil, needsAuth, docsFor };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ZF = api;
 })(typeof window !== "undefined" ? window : globalThis);

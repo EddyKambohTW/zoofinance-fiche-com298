@@ -223,7 +223,7 @@
     return `COM-298_${YEAR}_${clean(d.last) || "Client"}_${clean(d.first)}.pdf`.replace(/_\.pdf$/, ".pdf");
   };
   async function makePdf() {
-    const bytes = await window.ZFPDF.buildPdf(d, S.lang, window.PDFLib, { submittedAt: Date.now() });
+    const bytes = await window.ZFPDF.buildPdf(d, S.lang, window.PDFLib, { submittedAt: Date.now(), org: CFG.organisation || "Zoo Finance", software: CFG.downloadSoftware || "ImpôtExpert – PCBMI", impotNet: CFG.impotNet || "", userAgent: navigator.userAgent });
     lastPdf = new Blob([bytes], { type: "application/pdf" });
     return lastPdf;
   }
@@ -235,6 +235,7 @@
 
   async function submit(btn) {
     if (!validateAll()) return;
+    if (!authOk()) return;
     btn.disabled = true; const label = btn.textContent; btn.textContent = t(UI.sending);
     const status = $("#submitStatus"); status.className = "status"; status.textContent = "";
     try {
@@ -289,12 +290,136 @@
     S = { d: {}, lang: S.lang, step: 0, remember: S.remember }; // in-memory reset, nothing persisted
   }
 
+  // ---------------- COM-1076.TD.A signature ----------------
+  const fmtLong = (dt) => dt.toLocaleDateString(S.lang === "fr" ? "fr-CA" : "en-CA", { day: "numeric", month: "long", year: "numeric" });
+  const SIG_MAX_AGE = 24 * 3600e3; // re-sign after a day so the 2-day authorization is still valid on receipt
+
+  function authOk() {
+    const fresh = d.sig_at && Date.now() - new Date(d.sig_at).getTime() < SIG_MAX_AGE;
+    if (!window.ZF.needsAuth(d) || (d.sig && fresh && d.sig_ok && (d.sig_name || "").trim())) return true;
+    const box = $("#authBox"); const err = $("#authErr");
+    if (err) err.textContent = t(UI.sigMissing);
+    if (box) { box.classList.add("bad"); box.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    return false;
+  }
+
+  // crop a signature canvas to the ink, with a little padding
+  function trimmed(cv) {
+    const c = cv.getContext("2d"); const { width: w, height: h } = cv;
+    const px = c.getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return cv.toDataURL("image/png");
+    const pad = 8; x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
+    const out = document.createElement("canvas"); out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
+    out.getContext("2d").drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+    return out.toDataURL("image/png");
+  }
+
+  function authBlock(stage) {
+    const A = window.ZF.AUTH;
+    const software = CFG.downloadSoftware || "ImpôtExpert – PCBMI";
+    const org = CFG.organisation || "Zoo Finance";
+    let expiredMsg = null;
+    if (d.sig_at && Date.now() - new Date(d.sig_at).getTime() >= SIG_MAX_AGE) {
+      delete d.sig; delete d.sig_full; delete d.sig_at; d.sig_ok = false; save(true); expiredMsg = t(UI.sigExpired);
+    }
+    if (d.sig_name === undefined) d.sig_name = `${d.first || ""} ${d.last || ""}`.trim();
+
+    const box = h("div", { class: "estep auth", id: "authBox" });
+    box.append(h("h3", {}, h("span", { class: "snum" }, "✎"), t(UI.authTitle)));
+    box.append(h("p", { class: "info" }, t(UI.authWhy)));
+    if (expiredMsg) box.append(h("p", { class: "form-err" }, expiredMsg));
+    const doc = h("div", { class: "authdoc" },
+      h("p", { class: "muted small" }, `${A.formNo} · Revenu Québec · ${t(UI.authYear)} ${YEAR}`),
+      h("p", {}, h("strong", {}, `${d.first || ""} ${d.last || ""}`.trim())),
+      h("p", {}, S.lang === "fr" ? A.auth(software) : A.en.auth(software, org)),
+      h("p", {}, S.lang === "fr" ? A.understand : "By signing this form, I understand that"),
+      h("ul", {}, ...(S.lang === "fr" ? A.bullets : A.en.bullets).map((b) => h("li", {}, b))),
+      h("p", { class: "small" }, `${t(UI.authOrg)}${S.lang === "fr" ? " : " : ": "}`, h("strong", {}, org)),
+      S.lang === "en" ? h("p", { class: "muted small" }, A.en.note) : null);
+    box.append(doc);
+
+    // signature pad
+    const wrapC = h("div", { class: "sigpad" });
+    const canvas = h("canvas", { "aria-label": t(UI.sigLabel) });
+    const hint = h("span", { class: "sighint" }, t(UI.sigLabel));
+    wrapC.append(canvas, hint);
+    const ctx = canvas.getContext("2d");
+    let drawing = false, dirty = false, last = null;
+    const fit = () => {
+      const r = wrapC.getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(300, r.width) * dpr; canvas.height = 160 * dpr;
+      canvas.style.width = "100%"; canvas.style.height = "160px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#14203c";
+      const src = d.sig_full || d.sig;
+      if (src) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, canvas.width / dpr, canvas.height / dpr); img.src = src; hint.hidden = true; }
+    };
+    const pos = (e) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    canvas.addEventListener("pointerdown", (e) => { drawing = true; last = pos(e); canvas.setPointerCapture(e.pointerId); hint.hidden = true; ctx.beginPath(); ctx.arc(last.x, last.y, 1.1, 0, Math.PI * 2); ctx.fill(); });
+    canvas.addEventListener("pointermove", (e) => { if (!drawing) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; dirty = true; });
+    const end = () => {
+      if (!drawing) return; drawing = false;
+      if (!dirty) return;
+      d.sig_full = canvas.toDataURL("image/png");   // what's on screen (for redrawing)
+      d.sig = trimmed(canvas);                       // ink only (for the PDF)
+      d.sig_at = new Date().toISOString(); S.downloaded = false;
+      stamp(); save(true); box.classList.remove("bad"); $("#authErr").textContent = "";
+    };
+    canvas.addEventListener("pointerup", end); canvas.addEventListener("pointercancel", end); canvas.addEventListener("pointerleave", end);
+    const stampEl = h("p", { class: "ok small" });
+    const stamp = () => {
+      stampEl.textContent = d.sig_at ? `✓ ${t(UI.sigSignedOn)} ${new Date(d.sig_at).toLocaleString(S.lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long", timeStyle: "short" })} — ${t(UI.sigValidUntil)} ${fmtLong(window.ZF.authValidUntil(d))}` : "";
+    };
+    stamp();
+    box.append(wrapC, h("div", { class: "row tight" },
+      h("button", { type: "button", class: "link", onclick: () => { ctx.clearRect(0, 0, canvas.width, canvas.height); delete d.sig; delete d.sig_full; delete d.sig_at; dirty = false; hint.hidden = false; stamp(); S.downloaded = false; save(true); } }, t(UI.sigClear))), stampEl);
+
+    box.append(h("div", { class: "field" },
+      h("label", { class: "lbl", for: "sig_name" }, t(UI.sigName), h("span", { class: "req" }, " *")),
+      h("input", { id: "sig_name", type: "text", value: d.sig_name || "", autocomplete: "name", oninput: (e) => { d.sig_name = e.target.value; S.downloaded = false; save(); } })));
+    box.append(h("label", { class: "consent", for: "sig_ok" },
+      h("input", { type: "checkbox", id: "sig_ok", checked: !!d.sig_ok, onchange: (e) => { d.sig_ok = e.target.checked; S.downloaded = false; save(true); } }),
+      h("span", {}, t(UI.sigAgree), h("span", { class: "req" }, " *"))));
+    box.append(h("p", { id: "authErr", class: "form-err", role: "alert" }));
+    stage.append(box);
+    requestAnimationFrame(fit);
+    window.addEventListener("resize", () => { if (document.body.contains(canvas) && !drawing) fit(); }, { passive: true });
+  }
+
+  // ---------------- documents to attach (depends on answers) ----------------
+  function docsBlock(stage) {
+    const docs = window.ZF.docsFor(d);
+    if (!docs.length) return;
+    if (!Array.isArray(d.docs_ok)) d.docs_ok = [];
+    const box = h("div", { class: "estep docs" },
+      h("h3", {}, h("span", { class: "snum" }, "📎"), t(UI.docsTitle)),
+      h("p", { class: "muted small" }, t(UI.docsHint)));
+    const fs = h("fieldset", { class: "choices stack" });
+    docs.forEach((doc) => fs.append(h("label", { class: "chip box", for: `doc_${doc.id}` },
+      h("input", { type: "checkbox", id: `doc_${doc.id}`, checked: d.docs_ok.includes(doc.id), onchange: (e) => {
+        d.docs_ok = d.docs_ok.filter((x) => x !== doc.id); if (e.target.checked) d.docs_ok.push(doc.id); save();
+      } }),
+      h("span", {}, t(doc.l)))));
+    box.append(fs);
+    stage.append(box);
+  }
+
   // ---------------- "download + email it yourself" ending ----------------
   function emailSteps(stage) {
     const inbox = CFG.inbox || "serviceclient@zoofinance.ca";
     const name = `${d.first || ""} ${d.last || ""}`.trim();
-    const subject = `${t(UI.mailSubject)} COM-298 ${YEAR} – ${name}`;
-    const body = () => t(UI.mailBody).replace("{year}", YEAR).replace("{file}", fileName()).replace("{name}", name);
+    const subject = `${t(UI.mailSubject)} COM-298 ${YEAR} – ${name}` + (window.ZF.needsAuth(d) && d.sig_at ? ` – TDF ${S.lang === "fr" ? "avant le" : "before"} ${fmtLong(window.ZF.authValidUntil(d))}` : "");
+    const body = () => {
+      let b = t(UI.mailBody).replace("{year}", YEAR).replace("{file}", fileName()).replace("{name}", name);
+      const extra = [];
+      if (window.ZF.needsAuth(d) && d.sig_at) extra.push(t(UI.mailAuth).replace("{signed}", fmtLong(new Date(d.sig_at))).replace("{until}", fmtLong(window.ZF.authValidUntil(d))));
+      const docs = window.ZF.docsFor(d);
+      if (docs.length) extra.push(t(UI.mailDocs) + "\n" + docs.map((x) => `- ${t(x.l)}`).join("\n"));
+      if (extra.length) b = b.replace(/\n\n([^\n]*)\n([^\n]*)$/, "\n\n" + extra.join("\n\n") + "\n\n$1\n$2");
+      return b;
+    };
     const mailto = () => `mailto:${inbox}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body())}`;
 
     const done1 = h("p", { class: "ok small", hidden: true });
@@ -303,6 +428,7 @@
 
     const btn1 = h("button", { type: "button", class: "btn big", id: "submitBtn", onclick: async (e) => {
       if (!validateAll()) return;              // jumps to the first incomplete step if needed
+      if (!authOk()) return;
       const blob = await makePdf(); downloadBlob(blob);
       S.downloaded = true; save(true);
       render();                                 // validateAll re-rendered the page; draw it again with steps 2–3 open
@@ -416,6 +542,8 @@
         } }, t(UI.preview)),
         CFG.webhookUrl ? h("button", { type: "button", class: "btn ghost", onclick: async () => downloadBlob(await makePdf()) }, t(UI.download)) : null));
       stage.append(frame);
+      if (window.ZF.needsAuth(d)) authBlock(stage);
+      docsBlock(stage);
       if (!CFG.webhookUrl) { stage.querySelector(".info").textContent = t(UI.reviewBodyEmail); emailSteps(stage); $("#nextBtn").hidden = true; }
       else {
       stage.append(h("div", { class: "submit-row" },

@@ -13,6 +13,14 @@ fill in online instead of printing. It runs on **GitHub Pages**, has no server a
    and the client follows three steps: **(1)** download the PDF, **(2)** email it to **serviceclient@zoofinance.ca**
    (the "Open my email" button fills in the address, subject and message, and on phones a Share button attaches the PDF
    in the mail app directly), and **(3)** erase their answers from the device once it's sent.
+   - **COM-1076.TD.A (tax data download):** if the client answers Yes in Part 4, the last step shows the authorization and asks them to
+     sign it on screen (finger or mouse), type their name and check a consent box. The PDF then includes a reproduction of COM-1076.TD.A
+     with the signature, a signature certificate (date and time, email, device, SHA-256 fingerprint), and a red banner on page 1
+     reading "download before …". **The authorization is valid for 2 days**, so download the data within 48 hours of receiving the email.
+     A signature older than 24 hours is cleared and the client is asked to sign again. Organization name, ImpôtNet number and software
+     are set in `config.js`.
+   - **Documents to attach:** a checklist built from the answers (RL-31 for tenants, medical receipts, support judgment, RL-19,
+     RPA lease and Schedule 6, newcomer proof, and so on). It appears on screen, in the PDF and in the email body.
 4. *Optional automatic mode:* put an n8n webhook URL in `config.js` → `webhookUrl` and the last step becomes a single
    **Send** button that posts the PDF to n8n, which emails it to the inbox. The n8n workflow
    "Zoo Finance · COM-298 Form → Inbox" is already built for this but not published.
@@ -20,7 +28,7 @@ fill in online instead of printing. It runs on **GitHub Pages**, has no server a
 ```
 index.html          page shell
 config.js           ← inbox address, optional webhook URL, autosave lifetime (edit this)
-js/schema.js        every question, FR + EN labels, and the "when does this apply" rules
+js/schema.js        every question, FR + EN labels, "when does this apply" rules, COM-1076.TD.A text, documents-to-attach rules
 js/pdf.js           PDF layout (same schema, so the form and the PDF always match)
 js/app.js           wizard, validation (SIN check digit, postal code), autosave, submit
 css/styles.css
