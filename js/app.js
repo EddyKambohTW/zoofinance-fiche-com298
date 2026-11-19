@@ -410,7 +410,7 @@
   function emailSteps(stage) {
     const inbox = CFG.inbox || "serviceclient@zoofinance.ca";
     const name = `${d.first || ""} ${d.last || ""}`.trim();
-    const subject = `${t(UI.mailSubject)} COM-298 ${YEAR} – ${name}` + (window.ZF.needsAuth(d) && d.sig_at ? ` – TDF ${S.lang === "fr" ? "avant le" : "before"} ${fmtLong(window.ZF.authValidUntil(d))}` : "");
+    const subject = `${t(UI.mailSubject)} COM-298 ${YEAR} – ${name}`;
     const body = () => {
       let b = t(UI.mailBody).replace("{year}", YEAR).replace("{file}", fileName()).replace("{name}", name);
       const extra = [];
